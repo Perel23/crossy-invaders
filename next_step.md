@@ -1,29 +1,46 @@
 # Crossy Invaders — Session Tracker
 
-## Status: NOT STARTED — setup pending
+## Status: Step 1 complete — ready for Step 2
 
 ---
 
 ## Completed steps
-_(none yet)_
+
+### ✅ Step 1 — Project scaffold (2026-05-20)
+- GitHub repo created: https://github.com/Perel23/crossy-invaders
+- `bagel.h` copied from moshesu/bagel26 (single header, no full clone needed)
+- `lib/SDL` and `lib/SDL_image` added as git submodules
+- `CMakeLists.txt` set up (SDL3 + SDL3_image, no Box2D — discrete movement only)
+- `Game.h` / `Game.cpp` skeleton: opens 800×600 black window at 60 FPS, exits on ESC
+- `Components.h` placeholder created
+- `main.cpp` written
+
+**To build on your machine (first time):**
+```bash
+git clone --recurse-submodules https://github.com/Perel23/crossy-invaders
+cd crossy-invaders
+mkdir build && cd build
+cmake ..
+make
+./crossy_invaders
+```
 
 ---
 
-## Next step to do → Step 1: Project scaffold
+## Next step to do → Step 2: Components + player entity
 
-**Goal**: Get a window open with the bagel26 engine — nothing more.
+**Goal**: Define all components in `Components.h` and spawn a visible player entity at the bottom of the screen.
 
 **What to do**:
-1. Create GitHub repo `crossy-invaders`
-2. Copy `bagel.h` from moshesu/bagel26
-3. Add `lib/SDL` and `lib/SDL_image` as git submodules (same URLs as bagel26)
-4. Write `CMakeLists.txt` (SDL3 + SDL3_image only — no Box2D needed)
-5. Write `main.cpp` that opens a black 800×600 window and exits on ESC
-6. Write minimal `Game.h` / `Game.cpp` skeleton with empty systems
+1. Add a spritesheet to `res/` (or use colored rectangles as placeholder)
+2. Define components: `Transform`, `Drawable`, `LanePos`, `PlayerTag`
+3. Override storage for frequently-iterated components (`PackedStorage`)
+4. In `Game` constructor: spawn one player entity with all four components
+5. Implement `draw_system()` — iterate entities with `Transform`+`Drawable`, render them
 
-**Why**: Before writing any ECS code, we need to confirm the build works end-to-end on all team members' machines.
+**Why**: This is the first real ECS step — you'll see how components attach to entities and how systems filter them with a mask.
 
-**Definition of done**: `cmake .. && make && ./crossy-invaders` opens a window.
+**Definition of done**: A player sprite (or colored rectangle) appears at the bottom-center of the window.
 
 ---
 
