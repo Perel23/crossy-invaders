@@ -1,6 +1,6 @@
 # Crossy Invaders — Session Tracker
 
-## Status: Step 1 complete — ready for Step 2
+## Status: Step 2 complete — ready for Step 3
 
 ---
 
@@ -27,20 +27,30 @@ make
 
 ---
 
-## Next step to do → Step 2: Components + player entity
+### ✅ Step 2 — Components + player entity (2026-05-20)
+- Bumped `MaxComponents` to 16 in `bagel.h` (was 6)
+- Defined `Transform`, `Drawable`, `LanePos`, `PlayerTag` in `Components.h`
+- `PackedStorage` for `LanePos` and `PlayerTag`
+- Player entity spawned at bottom-center with all four components
+- `draw_system` iterates `Transform`+`Drawable` mask, draws green rectangle placeholder
 
-**Goal**: Define all components in `Components.h` and spawn a visible player entity at the bottom of the screen.
+**Definition of done**: ✅ Green rectangle appears at bottom-center of window
+
+---
+
+## Next step to do → Step 3: Input + player movement
+
+**Goal**: Arrow keys move the player between discrete lanes. One keypress = one tile hop (Crossy Road style).
 
 **What to do**:
-1. Add a spritesheet to `res/` (or use colored rectangles as placeholder)
-2. Define components: `Transform`, `Drawable`, `LanePos`, `PlayerTag`
-3. Override storage for frequently-iterated components (`PackedStorage`)
-4. In `Game` constructor: spawn one player entity with all four components
-5. Implement `draw_system()` — iterate entities with `Transform`+`Drawable`, render them
+1. Add `InputState` component: booleans for up/down/left/right, plus a `moved` flag to prevent key-hold sliding
+2. Implement `input_system`: poll SDL keyboard state → write into `InputState`
+3. Implement `player_move_system`: read `InputState`, update `LanePos` (clamped to grid bounds), recalculate `Transform.p` from lane+col
+4. Define the grid constants: `TILE = 48`, `COLS = 800/48`, `LANES = 600/48`
 
-**Why**: This is the first real ECS step — you'll see how components attach to entities and how systems filter them with a mask.
+**Why**: This introduces a second inter-system data flow — `input_system` writes data that `player_move_system` reads. That's the ECS way to pass information between systems without coupling them.
 
-**Definition of done**: A player sprite (or colored rectangle) appears at the bottom-center of the window.
+**Definition of done**: The green rectangle hops one tile per arrow key press, stops at screen edges.
 
 ---
 
