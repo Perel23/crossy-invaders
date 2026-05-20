@@ -11,7 +11,7 @@
 namespace bagel
 {
 	/**** Parameters ****/
-	inline constexpr int	MaxComponents = 6;
+	inline constexpr int	MaxComponents = 16;
 	inline constexpr bool	DynamicBags = true;
 	inline constexpr int	IdBagSize = 10;
 	inline constexpr int	InitialEntities = 100;

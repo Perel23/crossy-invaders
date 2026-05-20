@@ -21,8 +21,8 @@ namespace ci
 		static constexpr int	FPS = 60;
 		static constexpr Uint64	GAME_FRAME = 1000 / FPS;
 
-		void input_system();
-		void draw_system();
+		void input_system() const;
+		void draw_system() const;
 
 		SDL_Window*		win = nullptr;
 		SDL_Renderer*	ren = nullptr;
