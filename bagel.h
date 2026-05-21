@@ -4,8 +4,10 @@
 ///
 
 #pragma once
-//#include <cstdlib>
+#include <cstdlib>
 #include <cstdint>
+#include <algorithm>
+#include <bit>
 #include <type_traits>
 
 namespace bagel

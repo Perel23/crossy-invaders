@@ -16,6 +16,28 @@ Built as an ECS course assignment using the **bagel26** engine.
 - Entities created in constructor with `Entity::create().addAll(...)`
 - Namespace: `bagel` for engine, `ci` (crossy invaders) for our code
 
+## Visual Style
+
+### Camera / Perspective
+- **Diagonal top-down view** — like the real Crossy Road: the camera looks down at roughly 45° from above and slightly in front, giving a pseudo-3D feel without true 3D
+- Tiles and sprites are drawn as if seen from this angle: slightly squashed vertically, with a visible "top face" and a short "front face" on raised objects (cars, shelters, enemies)
+- Depth is faked with draw order: entities with a higher lane index (farther from the player) are drawn first so nearer entities overlap them
+- No actual 3D math — all positions remain on the 2D grid; the isometric look comes entirely from the sprite artwork and draw order
+
+### Camera follows the player
+- The player is always rendered at the **bottom-center of the screen** — the camera scrolls to keep them there
+- All other entities (enemies, hazards, bullets, shelters) are rendered at `world_pos - camera_offset`
+- `Transform.p` stores **world-space position** for all entities; the camera offset is subtracted only at render time in `draw_system`
+- The camera tracks the player's world Y: `cameraY = player.Transform.p.y - (WIN_H - TILE * 1.5f)` — so the player sits near the bottom row on screen regardless of how far they've advanced
+- This gives the Crossy Road feel of always moving "forward" into danger — the screen never feels static
+
+### Implementation note
+When we add the camera, `draw_system` will calculate `screenPos = worldPos - {0, cameraY}` before drawing each entity. No component changes needed — `Transform.p` already holds world positions consistently. The current placeholder code uses screen == world (camera fixed at origin), which will be replaced when sprites are added.
+
+### Art direction
+- Sprites should be pre-rendered or drawn to match the diagonal perspective (not flat top-down)
+- When we add a spritesheet, tiles are roughly 2:1 width-to-height ratio (standard isometric tile shape)
+
 ## Game Design
 
 ### Characters (player choice at start)
@@ -81,3 +103,4 @@ crossy-invaders/
 - Each step must compile and produce visible progress
 - Follow bagel26 Pong coding style exactly
 - `next_step.md` is updated at the end of every session
+- **Teach every step**: before writing code, explain what we're doing and why — cover the ECS concept involved, the design decision, and what the code will do. The team is learning while building.

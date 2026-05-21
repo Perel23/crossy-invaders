@@ -19,6 +19,34 @@ namespace ci
 	// Tag component — marks the player entity.
 	// Tags carry no data; their presence in the entity's bitmask is what matters.
 	struct PlayerTag {};
+
+	// Keyboard state for the player.
+	// moved/shotFired/activateFired prevent key-hold from repeating actions every frame.
+	using InputState = struct { bool up, down, left, right, moved, shoot, shotFired, activate, activateFired; };
+
+	// Tag component — marks enemy entities.
+	struct EnemyTag {};
+
+	// Tag component — marks bullet entities.
+	// fromPlayer = true → fired by player (travels up), false → fired by enemy (travels down).
+	using BulletTag = struct { bool fromPlayer; };
+
+	// Continuous pixel velocity (pixels per frame at 60 fps).
+	// Used for bullets; enemies move discretely via enemy_move_system.
+	using Velocity = struct { float dx, dy; };
+
+	// Hit points. Enemies have 1 (one-shot), player has 3, shelters have more.
+	using Health = struct { int hp; };
+
+	// Tag component — marks lane-hazard entities (moving cars/obstacles).
+	struct Hazard {};
+
+	// Iron Dome shield. timer > 0 means the shield is active (counts down in frames).
+	// charges = how many activations remain this life.
+	using Shield = struct { float timer; int charges; };
+
+	// Tag component — marks shelter (bunker) entities.
+	struct Shelter {};
 }
 
 // --- Storage specializations ---
@@ -31,4 +59,28 @@ template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::PlayerTag> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::PlayerTag>;
+};
+template <> struct bagel::Storage<ci::InputState> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::InputState>;
+};
+template <> struct bagel::Storage<ci::EnemyTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::EnemyTag>;
+};
+template <> struct bagel::Storage<ci::BulletTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::BulletTag>;
+};
+template <> struct bagel::Storage<ci::Velocity> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Velocity>;
+};
+template <> struct bagel::Storage<ci::Health> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Health>;
+};
+template <> struct bagel::Storage<ci::Hazard> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Hazard>;
+};
+template <> struct bagel::Storage<ci::Shield> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Shield>;
+};
+template <> struct bagel::Storage<ci::Shelter> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Shelter>;
 };
