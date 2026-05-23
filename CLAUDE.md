@@ -16,6 +16,19 @@ Built as an ECS course assignment using the **bagel26** engine.
 - Entities created in constructor with `Entity::create().addAll(...)`
 - Namespace: `bagel` for engine, `ci` (crossy invaders) for our code
 
+## ECS Rules (from lecturer feedback)
+
+**No global or specific member variables** — variables like `leftHeld`, `gravityTimer`, `invincFrames` must NOT be class members. In ECS everything lives in components and is processed by systems.
+
+**No stored entity handles** — do not keep `activeEnt` or similar handles as class members. Systems must iterate all entities with `MaskBuilder` + `Entity::first()` / `e.next()` / `e.test(mask)` and filter by component mask. At construction ensure only one entity per unique role exists.
+
+**Timers are components, not members** — any timer (movement cooldown, invincibility, shield duration, shoot interval) must be a component on the relevant entity with a system that decrements it. The ideal pattern:
+1. Timer component counts down each frame
+2. When it reaches 0, the system adds a tag to the entity
+3. A separate system handles that tag (single responsibility)
+
+**Events/flags are components or tags** — game-over, win, and similar state flags belong as components (`GameStatus`) or tags (`GameOverTag`) on entities, not as class-level booleans.
+
 ## Visual Style
 
 ### Camera / Perspective

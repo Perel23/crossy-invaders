@@ -47,6 +47,22 @@ namespace ci
 
 	// Tag component — marks shelter (bunker) entities.
 	struct Shelter {};
+
+	// Post-hit invincibility for the player (frames remaining).
+	// Lives on the player entity; collision_system reads and writes it.
+	using Invincibility = struct { int frames; };
+
+	// Whole-formation movement and shoot timers plus direction.
+	// Lives on a dedicated formation entity spawned alongside enemies.
+	using FormationState = struct { int dir; Uint64 moveTimer; Uint64 shootTimer; };
+
+	// End-of-game result flags — set by collision_system, read by run() and endgame_draw().
+	// Lives on a game-status entity spawned with the rest of the gameplay entities.
+	using GameStatus = struct { bool gameOver; bool won; };
+
+	// Character-select screen state: which character is highlighted and key-hold debounce.
+	// Lives on a persistent entity created at startup (no Transform, survives reset).
+	using SelectState = struct { int selected; bool moved; };
 }
 
 // --- Storage specializations ---
@@ -80,6 +96,9 @@ template <> struct bagel::Storage<ci::Hazard> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::Shield> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::Shield>;
+};
+template <> struct bagel::Storage<ci::Invincibility> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Invincibility>;
 };
 template <> struct bagel::Storage<ci::Shelter> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::Shelter>;

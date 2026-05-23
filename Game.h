@@ -52,15 +52,6 @@ namespace ci
 		SDL_Window*		win              = nullptr;
 		SDL_Renderer*	ren              = nullptr;
 
-		mutable GameState _state          = GameState::Select;
-		mutable int		_selectedChar    = 0;   // 0 = Trump, 1 = Bibi
-		mutable bool	_selectMoved     = false;
-
-		mutable int		_formationDir    = 1;
-		mutable Uint64	_enemyTimer      = 0;
-		mutable Uint64	_enemyShootTimer = 0;
-		mutable bool	_gameOver        = false;
-		mutable bool	_won             = false;
-		mutable int		_invincFrames    = 0;   // frames of post-hit invincibility remaining
+		mutable GameState _state = GameState::Select;
 	};
 }
