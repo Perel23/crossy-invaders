@@ -35,6 +35,7 @@ namespace ci
 
 	Game::~Game()
 	{
+		if (player_texture) SDL_DestroyTexture(player_texture);
 		if (ren) SDL_DestroyRenderer(ren);
 		if (win) SDL_DestroyWindow(win);
 		SDL_Quit();
@@ -52,6 +53,21 @@ namespace ci
 
 	void Game::spawn_entities() const
 	{
+		// Read selected character from the persistent SelectState entity.
+		static const Mask ssMask = MaskBuilder().set<SelectState>().build();
+		int selected = 0;
+		for (Entity e = Entity::first(); !e.eof(); e.next())
+			if (e.test(ssMask)) { selected = e.get<SelectState>().selected; break; }
+
+		// Load the matching character sprite; fall back gracefully if the file is missing.
+		if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
+		const char* path = (selected == 0) ? "res/trump_pixel.png" : "res/bibi_pixel.png";
+		SDL_Surface* surf = IMG_Load(path);
+		if (surf) {
+			player_texture = SDL_CreateTextureFromSurface(ren, surf);
+			SDL_DestroySurface(surf);
+		}
+
 		const int startCol  = COLS / 2;
 		const int startLane = 0;
 		Entity::create().addAll(
@@ -123,6 +139,9 @@ namespace ci
 		for (Entity e = Entity::first(); !e.eof(); e.next()) {
 			if (e.test(anyMask)) e.destroy();
 		}
+
+		// Free the player sprite so the next spawn_entities() reloads it cleanly.
+		if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
 
 		// Reset character-select debounce on the persistent UI entity.
 		static const Mask ssMask = MaskBuilder().set<SelectState>().build();
@@ -539,16 +558,11 @@ namespace ci
 	void Game::draw_system() const
 	{
 		static const Mask drawMask    = MaskBuilder().set<Transform>().set<Drawable>().build();
+		static const Mask playerMask  = MaskBuilder().set<PlayerTag>().set<Shield>().build();
 		static const Mask enemyMask   = MaskBuilder().set<EnemyTag>().build();
 		static const Mask bulletMask  = MaskBuilder().set<BulletTag>().build();
 		static const Mask hazardMask2 = MaskBuilder().set<Hazard>().build();
-		static const Mask shieldMask  = MaskBuilder().set<PlayerTag>().set<Shield>().build();
 		static const Mask shelterDMsk = MaskBuilder().set<Shelter>().set<Health>().build();
-		static const Mask ssMask      = MaskBuilder().set<SelectState>().build();
-
-		int selected = 0;
-		for (Entity e = Entity::first(); !e.eof(); e.next())
-			if (e.test(ssMask)) { selected = e.get<SelectState>().selected; break; }
 
 		for (Entity e = Entity::first(); !e.eof(); e.next()) {
 			if (!e.test(drawMask)) continue;
@@ -562,35 +576,39 @@ namespace ci
 				d.size.x, d.size.y
 			};
 
-			if (e.test(shieldMask) && e.get<Shield>().timer > 0.f) {
+			if (e.test(playerMask) && e.get<Shield>().timer > 0.f) {
 				SDL_SetRenderDrawColor(ren, 80, 140, 255, 255);
 				SDL_FRect halo = {dest.x - 7, dest.y - 7, dest.w + 14, dest.h + 14};
 				SDL_RenderFillRect(ren, &halo);
 			}
 
-			if (e.test(bulletMask)) {
+			if (e.test(playerMask)) {
+				// Draw the character sprite if loaded, otherwise fall back to a colour rect.
+				if (player_texture) {
+					SDL_RenderTexture(ren, player_texture, nullptr, &dest);
+				} else {
+					SDL_SetRenderDrawColor(ren, 220, 200, 50, 255);
+					SDL_RenderFillRect(ren, &dest);
+				}
+			} else if (e.test(bulletMask)) {
 				if (e.get<BulletTag>().fromPlayer)
 					SDL_SetRenderDrawColor(ren, 255, 255,   0, 255);
 				else
 					SDL_SetRenderDrawColor(ren, 255, 140,   0, 255);
+				SDL_RenderFillRect(ren, &dest);
 			} else if (e.test(shelterDMsk)) {
 				const int hp    = e.get<Health>().hp;
 				const Uint8 v   = static_cast<Uint8>(50 + hp * 26);
 				SDL_SetRenderDrawColor(ren, v, v, v, 255);
+				SDL_RenderFillRect(ren, &dest);
 			} else if (e.test(hazardMask2)) {
 				SDL_SetRenderDrawColor(ren,   0, 200, 220, 255);
+				SDL_RenderFillRect(ren, &dest);
 			} else if (e.test(enemyMask)) {
 				SDL_SetRenderDrawColor(ren, 220,  50,  50, 255);
-			} else if (e.test(shieldMask)) {
-				// player entity
-				if (selected == 0)
-					SDL_SetRenderDrawColor(ren, 220, 120,  30, 255); // Trump – orange
-				else
-					SDL_SetRenderDrawColor(ren,  60, 120, 220, 255); // Bibi – blue
+				SDL_RenderFillRect(ren, &dest);
 			}
-			// Skip formation/GameStatus entities (no Drawable → never reach here).
-
-			SDL_RenderFillRect(ren, &dest);
+			// Formation/GameStatus entities have no Drawable — never reach here.
 		}
 
 		SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);

@@ -33,7 +33,7 @@ namespace ci
 		static constexpr int	SHIELD_CHARGES   = 2;      // uses per life
 
 		void spawn_entities() const;
-		void reset() const;
+		void reset() const;	
 
 		void select_input() const;
 		void select_draw() const;
@@ -49,8 +49,9 @@ namespace ci
 		void draw_system() const;
 		void endgame_draw() const;
 
-		SDL_Window*		win              = nullptr;
-		SDL_Renderer*	ren              = nullptr;
+		SDL_Window*		        win            = nullptr;
+		SDL_Renderer*	        ren            = nullptr;
+		mutable SDL_Texture*	player_texture = nullptr;
 
 		mutable GameState _state = GameState::Select;
 	};
