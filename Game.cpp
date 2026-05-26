@@ -794,6 +794,11 @@ namespace ci
           break;
        }
 
+       // Decrement screen shake
+       if (gsEnt.has<ScreenShake>() && gsEnt.get<ScreenShake>().frames > 0) {
+          --gsEnt.get<ScreenShake>().frames;
+       }
+
        auto overlaps = [](SDL_FPoint p1, SDL_FPoint s1, SDL_FPoint p2, SDL_FPoint s2) {
           return std::abs(p1.x - p2.x) < (s1.x + s2.x) * 0.5f &&
                  std::abs(p1.y - p2.y) < (s1.y + s2.y) * 0.5f;
