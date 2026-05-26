@@ -65,6 +65,7 @@ namespace ci
 		mutable SDL_Texture*	enemy_texture    = nullptr;
 		mutable SDL_Texture*	boss_texture     = nullptr;
 		mutable SDL_Texture*	shelter_texture  = nullptr;
+		mutable SDL_Texture*	hearts_texture   = nullptr;
 		mutable int _current_level    = 1;
 		mutable int _score            = 0;
 		mutable int _high_score       = 0;

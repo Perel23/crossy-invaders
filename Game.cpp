@@ -38,6 +38,8 @@ namespace ci
           if (s) { shelter_texture  = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
           s = IMG_Load("res/khamenai.png");
           if (s) { boss_texture     = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+          s = IMG_Load("res/hearts_spreadsheet.png");
+          if (s) { hearts_texture   = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
        }
 
        // SDL3 audio: open the default playback device as a stream.
@@ -58,6 +60,7 @@ namespace ci
        if (enemy_texture)     SDL_DestroyTexture(enemy_texture);
        if (boss_texture)      SDL_DestroyTexture(boss_texture);
        if (shelter_texture)   SDL_DestroyTexture(shelter_texture);
+       if (hearts_texture)    SDL_DestroyTexture(hearts_texture);
        if (trump_select_tex)  SDL_DestroyTexture(trump_select_tex);
        if (bibi_select_tex)   SDL_DestroyTexture(bibi_select_tex);
        for (int i = 0; i < 4; i++) {
@@ -1078,10 +1081,26 @@ namespace ci
           const auto& sh = e.get<Shield>();
           const bool rf  = e.has<RapidFire>() && e.get<RapidFire>().frames > 0;
 
-          for (int i = 0; i < 5; i++) {  // show up to 5 HP (can go above 3 via pickup)
-             SDL_FRect icon = {10.f + i * 26.f, 10.f, 20.f, 20.f};
-             SDL_SetRenderDrawColor(ren, i < hp ? 0 : 55, i < hp ? 220 : 55, i < hp ? 80 : 55, 255);
-             SDL_RenderFillRect(ren, &icon);
+          //hearts drawing
+          if (hearts_texture) {
+             float tw = 0, th = 0;
+             SDL_GetTextureSize(hearts_texture, &tw, &th);
+             const float cw = tw / 3.f;
+             const float ch = th / 3.f;
+             const SDL_FRect srcFull  = {0.f,        0.f, cw, ch};
+             const SDL_FRect srcEmpty = {2.f * cw,   ch,  cw, ch};
+
+             for (int i = 0; i < 3; i++) {
+                const SDL_FRect dst = {8.f + i * 30.f, 6.f, 26.f, 26.f};
+                SDL_RenderTexture(ren, hearts_texture, (i < hp) ? &srcFull : &srcEmpty, &dst);
+             }
+          } else {
+             // Fallback coloured squares.
+             for (int i = 0; i < 5; i++) {
+                SDL_FRect icon = {10.f + i * 26.f, 10.f, 20.f, 20.f};
+                SDL_SetRenderDrawColor(ren, i < hp ? 0 : 55, i < hp ? 220 : 55, i < hp ? 80 : 55, 255);
+                SDL_RenderFillRect(ren, &icon);
+             }
           }
           for (int i = 0; i < 3; i++) {
              SDL_FRect icon = {150.f + i * 26.f, 10.f, 20.f, 20.f};
