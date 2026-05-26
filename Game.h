@@ -52,6 +52,7 @@ namespace ci
 		SDL_Window*		        win            = nullptr;
 		SDL_Renderer*	        ren            = nullptr;
 		mutable SDL_Texture*	player_texture = nullptr;
+		mutable SDL_Texture*	enemy_texture  = nullptr;
 
 		mutable GameState _state = GameState::Select;
 	};

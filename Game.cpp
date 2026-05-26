@@ -36,6 +36,7 @@ namespace ci
 	Game::~Game()
 	{
 		if (player_texture) SDL_DestroyTexture(player_texture);
+		if (enemy_texture)  SDL_DestroyTexture(enemy_texture);
 		if (ren) SDL_DestroyRenderer(ren);
 		if (win) SDL_DestroyWindow(win);
 		SDL_Quit();
@@ -66,6 +67,14 @@ namespace ci
 		if (surf) {
 			player_texture = SDL_CreateTextureFromSurface(ren, surf);
 			SDL_DestroySurface(surf);
+		}
+
+		// Load the enemy sprite (shared by every enemy in the formation).
+		if (enemy_texture) { SDL_DestroyTexture(enemy_texture); enemy_texture = nullptr; }
+		SDL_Surface* enemySurf = IMG_Load("res/iranian_regime_pixel.png");
+		if (enemySurf) {
+			enemy_texture = SDL_CreateTextureFromSurface(ren, enemySurf);
+			SDL_DestroySurface(enemySurf);
 		}
 
 		const int startCol  = COLS / 2;
@@ -140,8 +149,9 @@ namespace ci
 			if (e.test(anyMask)) e.destroy();
 		}
 
-		// Free the player sprite so the next spawn_entities() reloads it cleanly.
+		// Free sprites so the next spawn_entities() reloads them cleanly.
 		if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
+		if (enemy_texture)  { SDL_DestroyTexture(enemy_texture);  enemy_texture  = nullptr; }
 
 		// Reset character-select debounce on the persistent UI entity.
 		static const Mask ssMask = MaskBuilder().set<SelectState>().build();
@@ -605,8 +615,12 @@ namespace ci
 				SDL_SetRenderDrawColor(ren,   0, 200, 220, 255);
 				SDL_RenderFillRect(ren, &dest);
 			} else if (e.test(enemyMask)) {
-				SDL_SetRenderDrawColor(ren, 220,  50,  50, 255);
-				SDL_RenderFillRect(ren, &dest);
+				if (enemy_texture)
+					SDL_RenderTexture(ren, enemy_texture, nullptr, &dest);
+				else {
+					SDL_SetRenderDrawColor(ren, 220,  50,  50, 255);
+					SDL_RenderFillRect(ren, &dest);
+				}
 			}
 			// Formation/GameStatus entities have no Drawable — never reach here.
 		}
