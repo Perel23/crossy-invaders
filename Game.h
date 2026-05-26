@@ -53,6 +53,8 @@ namespace ci
 		SDL_Renderer*	        ren            = nullptr;
 		mutable SDL_Texture*	player_texture = nullptr;
 		mutable SDL_Texture*	enemy_texture  = nullptr;
+		mutable int _current_level = 1;
+		mutable SDL_Texture* haz_textures[3] = {nullptr, nullptr, nullptr};
 
 		mutable GameState _state = GameState::Select;
 	};
