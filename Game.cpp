@@ -472,7 +472,7 @@ namespace ci
 
        // Character sprites inside each box.
        {
-          constexpr float IMG_PAD = 12.f;
+          constexpr float IMG_PAD = 20.f;
           constexpr float IMG_H   = BOX_H - 55.f;
           if (trump_select_tex) {
              SDL_FRect td = {TRUMP_X + IMG_PAD, BOX_Y + IMG_PAD, BOX_W - IMG_PAD * 2, IMG_H};
