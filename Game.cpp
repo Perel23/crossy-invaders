@@ -486,19 +486,20 @@ namespace ci
 
        SDL_SetRenderScale(ren, 3.f, 3.f);
        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-       SDL_RenderDebugText(ren, 104.f, 124.f, "TRUMP");
-       SDL_RenderDebugText(ren, 201.f, 124.f, "BIBI");
+       SDL_RenderDebugText(ren, 104.f, 90.f, "TRUMP");
+       SDL_RenderDebugText(ren, 201.f, 90.f, "BIBI");
        SDL_SetRenderScale(ren, 1.f, 1.f);
 
        SDL_SetRenderScale(ren, 2.f, 2.f);
        SDL_SetRenderDrawColor(ren, 180, 180, 180, 255);
-       SDL_RenderDebugText(ren, 152.f, 350.f, "LEFT/RIGHT   ENTER to play");
-       SDL_SetRenderScale(ren, 1.f, 1.f);
+       // Instructions
+       SDL_RenderDebugText(ren, 10.f, 280.f, "GOAL: Defeat all enemies and reach the top!");
+       SDL_RenderDebugText(ren, 10.f, 310.f, "ARROWS:Move # SPACE:Shoot # I:Iron Dome # P/ESC:Pause/Quit");
+       SDL_RenderDebugText(ren, 10.f, 340.f, "hit SPACE to play");       SDL_SetRenderScale(ren, 1.f, 1.f);
 
        // Controls reference.
        SDL_SetRenderScale(ren, 1.5f, 1.5f);
        SDL_SetRenderDrawColor(ren, 120, 120, 120, 255);
-       SDL_RenderDebugText(ren, 60.f, 460.f, "ARROWS: Move    SPACE: Shoot    I: Iron Dome    P/ESC: Pause");
        SDL_SetRenderScale(ren, 1.f, 1.f);
     }
 
@@ -1301,8 +1302,8 @@ namespace ci
                    if (_state == GameState::Playing)         _state = GameState::Paused;
                    else if (_state == GameState::Paused)     _state = GameState::Playing;
                 }
-                // ENTER: confirm character select.
-                if (sc == SDL_SCANCODE_RETURN && _state == GameState::Select) {
+                // SPACE: confirm character select.
+                if (sc == SDL_SCANCODE_SPACE && _state == GameState::Select) {
                    _state = GameState::Playing;
                    spawn_entities();
                 }
