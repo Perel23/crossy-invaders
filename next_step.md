@@ -1,6 +1,6 @@
 # Crossy Invaders — Session Tracker
 
-## Status: Step 10 complete — ready for Step 11
+## Status: Step 11 complete — ready for Step 12
 
 ---
 
@@ -86,22 +86,31 @@
 
 ---
 
-## Next step to do → Step 11: Level Progression
+### ✅ Step 11 — Polish & Gameplay Improvements (2026-05-26)
+- **Lane background**: each lane now has a distinct colour (dark green safe zone, asphalt road lanes with dashed centre-lines, dark-red enemy zone, divider lines between every lane)
+- **Level splash**: `GameState::LevelTransition` state; after clearing a wave a 150-frame "LEVEL X / Get ready…" overlay is shown before the next wave spawns — uses a `LevelSplash` ECS component with a `splash_system` that calls `spawn_entities()` when it expires
+- **Score**: `_score` increments by `10 × level` per enemy kill; displayed as `SCORE 00000` centred at the top of the HUD each frame
+- **Level number**: shown as `LVL X` in the HUD bottom-left area
+- **Multiple enemy shooters**: instead of always shooting from one fixed enemy, the system now finds all enemies on the front row and picks one at random each volley — shots come from varied horizontal positions
+- **Boss spread shot**: on level 3 the boss fires three bullets simultaneously at dx = −2.5, 0, +2.5 pixels/frame
+- **Boss health bar**: a full-width red bar below the HUD icons shows remaining boss HP during level 3
+- **Random hazard positions**: car starting X coordinates are randomised via `std::rand()` each time `spawn_entities()` runs; base speed scales with level (`+0.6 px/frame per level`)
 
-**Goal**: Multiple levels with increasing difficulty. Beating a wave starts the next level rather than ending the game.
+---
+
+## Next step to do → Step 12: Sound & Final Polish
+
+**Goal**: Add audio feedback and tighten the overall feel.
 
 **What to do**:
-1. Add `_level` counter (starts at 1) and a brief "LEVEL X" splash between waves
-2. On win condition (no enemies left), increment `_level`, re-spawn the enemy formation — don't go back to select
-3. Scale difficulty per level:
-   - `ENEMY_MOVE_MS` decreases (enemies step faster)
-   - `ENEMY_SHOOT_MS` decreases (enemies shoot more often)
-   - Optionally add a third enemy row at higher levels
-4. Add procedural/random variety to hazard lane positions and car counts so each run feels different (deferred from layout step)
+1. Add SDL_mixer (or SDL3 audio) as a submodule; load and play sound effects for: shoot, enemy hit, player hit, level clear, game over
+2. Add a high-score display on the game-over / win screen (persist to a file or keep session-best in memory)
+3. Animate the character select screen (show actual player sprites in the selection boxes)
+4. Add a brief screen-flash effect when the player takes damage (red tint overlay for ~10 frames)
 
-**Why**: This turns a one-shot demo into a proper arcade loop. Difficulty scaling is the core of the Space Invaders feel — the creeping dread as the formation speeds up.
+**Why**: Sound and tactile feedback are the last major gap between "functional prototype" and "feels like a real game".
 
-**Definition of done**: Player can complete wave 1 and be presented with a harder wave 2; game only ends on player death, not wave clear.
+**Definition of done**: Every major game event has a sound; the select screen shows sprites; damage flash is visible.
 
 ---
 
@@ -109,5 +118,4 @@
 
 | # | Step | Summary |
 |---|------|---------|
-| 11 | Level progression | Multiple levels, difficulty scaling, random hazard layout |
-| 12 | Polish | Sprites, sounds, score display, proper game over/win screen |
+| 12 | Sound & final polish | SDL_mixer SFX, high-score, damage flash, sprite select screen |

@@ -1,6 +1,7 @@
 #include "Game.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 using namespace std;
 using namespace bagel;
@@ -9,6 +10,7 @@ namespace ci
 {
     static constexpr int ENEMY_ROWS      = 2;
     static constexpr int ENEMY_COLS      = 8;
+    static constexpr int BOSS_HP         = 40;
     static constexpr int ENEMY_START_COL = (Game::COLS - ENEMY_COLS) / 2;
     static constexpr int ENEMY_TOP_LANE  = Game::LANES - 2;
 
@@ -23,6 +25,7 @@ namespace ci
           return;
        }
        SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+       std::srand(static_cast<unsigned>(SDL_GetTicks()));
 
        Entity::create().add(SelectState{0, false});
     }
@@ -39,11 +42,6 @@ namespace ci
        SDL_Quit();
     }
 
-    struct HazardDef { int lane; float xs[2]; float dx; };
-    static constexpr HazardDef HAZARD_DEFS[] = {
-       { 4, { 200.f, 720.f },  2.5f },   // lane 4: 2 cars going right
-       { 6, { 100.f, 620.f }, -2.0f },   // lane 6: 2 cars going left
-    };
     static constexpr float HAZARD_W = Game::TILE * 2.f - 4.f;   // 124 px wide
     static constexpr float HAZARD_H = Game::TILE       - 4.f;
 
@@ -133,18 +131,24 @@ namespace ci
              Health{5});
        }
 
-       //hazards.
+       // Hazards: randomised start positions and level-scaled speed.
+       const float base_speed = 2.5f + (_current_level - 1) * 0.6f;
+       struct HazardDef { int lane; float dx; int tex; };
+       const HazardDef hdefs[] = {
+          { 4,  base_speed, 0 },
+          { 6, -base_speed, 1 },
+       };
        int h_idx = 0;
-       for (const auto& def : HAZARD_DEFS) {
+       for (const auto& def : hdefs) {
           const float y = WIN_H - TILE / 2.f - def.lane * TILE;
-          for (float x : def.xs) {
+          for (int k = 0; k < 2; k++) {
+             const float x = (float)(std::rand() % WIN_W);
              Entity::create().addAll(
                 Transform{{x, y}, 0.f},
                 Drawable{{0, 0, 0, 0}, {HAZARD_W, HAZARD_H}},
                 Velocity{def.dx, 0.f},
                 Hazard{},
-                HazardVisual{h_idx % 3} // Rotate through the 3 sprites
-             );
+                HazardVisual{(def.tex + h_idx) % 3});
              h_idx++;
           }
        }
@@ -173,7 +177,95 @@ namespace ci
           if (e.test(ssMask)) { e.get<SelectState>().moved = false; break; }
        }
 
+       _score = 0;
        _state = GameState::Select;
+    }
+
+    void Game::draw_background() const
+    {
+       // Lane color palette: safe zone / road / no-man's land / enemy zone
+       for (int lane = 0; lane < LANES; lane++) {
+          const float y = WIN_H - (lane + 1) * TILE;
+          SDL_FRect rect = {0.f, y, (float)WIN_W, (float)TILE};
+
+          if (lane <= 1)
+             SDL_SetRenderDrawColor(ren, 20,  70, 20,  255);  // safe zone – dark green
+          else if (lane == 4 || lane == 6)
+             SDL_SetRenderDrawColor(ren, 40,  40, 50,  255);  // road lanes – asphalt
+          else if (lane == 5)
+             SDL_SetRenderDrawColor(ren, 28,  55, 28,  255);  // median strip
+          else if (lane >= LANES - 2)
+             SDL_SetRenderDrawColor(ren, 35,   8,  8,  255);  // enemy zone – dark red tint
+          else
+             SDL_SetRenderDrawColor(ren, 24,  55, 24,  255);  // general field
+          SDL_RenderFillRect(ren, &rect);
+       }
+
+       // Dashed centre lines on road lanes
+       SDL_SetRenderDrawColor(ren, 180, 160, 30, 255);
+       for (int lane : {4, 6}) {
+          const float cy = WIN_H - lane * TILE - TILE / 2.f;
+          for (int x = 0; x < WIN_W; x += 40) {
+             SDL_FRect dash = {(float)x, cy - 3.f, 24.f, 6.f};
+             SDL_RenderFillRect(ren, &dash);
+          }
+       }
+
+       // Lane divider lines
+       SDL_SetRenderDrawColor(ren, 55, 55, 55, 255);
+       for (int lane = 0; lane <= LANES; lane++) {
+          const float y = WIN_H - lane * TILE;
+          SDL_FRect line = {0.f, y, (float)WIN_W, 1.f};
+          SDL_RenderFillRect(ren, &line);
+       }
+    }
+
+    void Game::splash_system() const
+    {
+       static const Mask mask = MaskBuilder().set<LevelSplash>().build();
+       for (Entity e = Entity::first(); !e.eof(); e.next()) {
+          if (!e.test(mask)) continue;
+          auto& ls = e.get<LevelSplash>();
+          if (--ls.framesLeft <= 0) {
+             e.destroy();
+             spawn_entities();
+             _state = GameState::Playing;
+          }
+          return;
+       }
+    }
+
+    void Game::draw_level_splash() const
+    {
+       SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+       SDL_SetRenderDrawColor(ren, 0, 0, 0, 170);
+       SDL_FRect full = {0, 0, (float)WIN_W, (float)WIN_H};
+       SDL_RenderFillRect(ren, &full);
+       SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+
+       SDL_SetRenderScale(ren, 5.f, 5.f);
+       SDL_SetRenderDrawColor(ren, 80, 255, 80, 255);
+       char buf[32];
+       SDL_snprintf(buf, sizeof(buf), "LEVEL %d", _current_level);
+       SDL_RenderDebugText(ren, 65.f, 46.f, buf);
+       SDL_SetRenderScale(ren, 1.f, 1.f);
+
+       SDL_SetRenderScale(ren, 2.f, 2.f);
+       SDL_SetRenderDrawColor(ren, 160, 160, 160, 255);
+       SDL_RenderDebugText(ren, 182.f, 105.f, "Get ready...");
+       SDL_SetRenderScale(ren, 1.f, 1.f);
+    }
+
+    void Game::clear_game_entities() const
+    {
+       static const Mask anyMask = MaskBuilder().set<Transform>().build();
+       for (Entity e = Entity::first(); !e.eof(); e.next())
+          if (e.test(anyMask)) e.destroy();
+       if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
+       if (enemy_texture)  { SDL_DestroyTexture(enemy_texture);  enemy_texture  = nullptr; }
+       for (int i = 0; i < 3; i++) {
+          if (haz_textures[i]) { SDL_DestroyTexture(haz_textures[i]); haz_textures[i] = nullptr; }
+       }
     }
 
     void Game::select_input() const
@@ -392,23 +484,39 @@ namespace ci
        if (now - fs.shootTimer < shoot_ms) return;
        fs.shootTimer = now;
 
+       // Find minimum (closest-to-player) lane of all enemies.
        int minLane = LANES;
-       ent_type shooter{-1};
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (!e.test(enemyMask)) continue;
           const int lane = e.get<LanePos>().lane;
-          if (lane < minLane) {
-             minLane = lane;
-             shooter  = e.entity();
-          }
+          if (lane < minLane) minLane = lane;
        }
-       if (shooter.id >= 0) {
-          const SDL_FPoint p = Entity(shooter).get<Transform>().p;
-          Entity::create().addAll(
-             Transform{p, 0.f},
-             Drawable{{0, 0, 0, 0}, {6.f, 14.f}},
-             BulletTag{false},
-             Velocity{0.f, BULLET_SPEED});
+
+       // Count enemies on that front row.
+       int frontCount = 0;
+       for (Entity e = Entity::first(); !e.eof(); e.next()) {
+          if (e.test(enemyMask) && e.get<LanePos>().lane == minLane) frontCount++;
+       }
+
+       // Pick one at random and shoot from it.
+       if (frontCount > 0) {
+          int target = std::rand() % frontCount;
+          int idx    = 0;
+          for (Entity e = Entity::first(); !e.eof(); e.next()) {
+             if (!e.test(enemyMask) || e.get<LanePos>().lane != minLane) continue;
+             if (idx++ != target) continue;
+             const SDL_FPoint p = e.get<Transform>().p;
+             if (_current_level == 3) {
+                // Boss: three-way spread shot.
+                for (float dx : {-2.5f, 0.f, 2.5f})
+                   Entity::create().addAll(Transform{p,0.f}, Drawable{{0,0,0,0},{6.f,14.f}},
+                                           BulletTag{false}, Velocity{dx, BULLET_SPEED});
+             } else {
+                Entity::create().addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{6.f,14.f}},
+                                        BulletTag{false}, Velocity{0.f, BULLET_SPEED});
+             }
+             break;
+          }
        }
     }
 
@@ -522,7 +630,7 @@ namespace ci
              if (!en.test(enemyMask)) continue;
              if (!overlaps(bp, bs, en.get<Transform>().p, en.get<Drawable>().size)) continue;
              b.destroy();
-             if (--en.get<Health>().hp <= 0) en.destroy();
+             if (--en.get<Health>().hp <= 0) { en.destroy(); _score += 10 * _current_level; }
              break;
           }
        }
@@ -593,6 +701,8 @@ namespace ci
 
     void Game::draw_system() const
     {
+       draw_background();
+
        static const Mask drawMask    = MaskBuilder().set<Transform>().set<Drawable>().build();
        static const Mask playerMask  = MaskBuilder().set<PlayerTag>().set<Shield>().build();
        static const Mask enemyMask   = MaskBuilder().set<EnemyTag>().build();
@@ -677,6 +787,40 @@ namespace ci
           break;
        }
 
+       // Level + score text.
+       {
+          SDL_SetRenderScale(ren, 2.f, 2.f);
+          SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
+          char buf[48];
+          SDL_snprintf(buf, sizeof(buf), "LVL %d", _current_level);
+          SDL_RenderDebugText(ren, 5.f, 20.f, buf);
+          SDL_snprintf(buf, sizeof(buf), "SCORE %05d", _score);
+          SDL_RenderDebugText(ren, 216.f, 5.f, buf);
+          SDL_SetRenderScale(ren, 1.f, 1.f);
+       }
+
+       // Boss health bar (level 3 only).
+       if (_current_level == 3) {
+          static const Mask bossMask = MaskBuilder().set<EnemyTag>().set<Health>().build();
+          for (Entity e = Entity::first(); !e.eof(); e.next()) {
+             if (!e.test(bossMask)) continue;
+             const int hp   = e.get<Health>().hp;
+             const float bw = WIN_W * 0.55f;
+             const float bx = (WIN_W - bw) / 2.f;
+             SDL_SetRenderDrawColor(ren, 70, 0, 0, 255);
+             SDL_FRect barBg   = {bx, 46.f, bw, 12.f};
+             SDL_FRect barFill = {bx, 46.f, bw * hp / (float)BOSS_HP, 12.f};
+             SDL_RenderFillRect(ren, &barBg);
+             SDL_SetRenderDrawColor(ren, 230, 50, 50, 255);
+             SDL_RenderFillRect(ren, &barFill);
+             SDL_SetRenderScale(ren, 1.5f, 1.5f);
+             SDL_SetRenderDrawColor(ren, 255, 180, 180, 255);
+             SDL_RenderDebugText(ren, (bx - 30.f) / 1.5f, 30.f, "BOSS");
+             SDL_SetRenderScale(ren, 1.f, 1.f);
+             break;
+          }
+       }
+
        SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
     }
 
@@ -721,8 +865,10 @@ namespace ci
 
           if (_state == GameState::Select) {
              select_input();
+          } else if (_state == GameState::LevelTransition) {
+             splash_system();
           } else {
-             // Read game status from ECS (entity exists during Playing state).
+             // Playing state.
              for (Entity e = Entity::first(); !e.eof(); e.next())
                 if (e.test(gsMask)) { gameOver = e.get<GameStatus>().gameOver; won = e.get<GameStatus>().won; break; }
 
@@ -744,14 +890,12 @@ namespace ci
                    }
                 }
 
-                if (won) {
-                   if (_current_level < 3) {
-                      _current_level++;
-                      reset();
-                      _state = GameState::Playing;
-                      spawn_entities();
-                      continue; // Immediately start the next level
-                   }
+                if (won && _current_level < 3) {
+                   _current_level++;
+                   clear_game_entities();
+                   Entity::create().add(LevelSplash{150});
+                   _state = GameState::LevelTransition;
+                   won = false;
                 }
              }
           }
@@ -759,6 +903,8 @@ namespace ci
           SDL_RenderClear(ren);
           if (_state == GameState::Select) {
              select_draw();
+          } else if (_state == GameState::LevelTransition) {
+             draw_level_splash();
           } else {
              draw_system();
              if (gameOver || won) endgame_draw();

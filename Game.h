@@ -6,7 +6,7 @@
 
 namespace ci
 {
-	enum class GameState { Select, Playing };
+	enum class GameState { Select, Playing, LevelTransition };
 
 	class Game
 	{
@@ -33,7 +33,8 @@ namespace ci
 		static constexpr int	SHIELD_CHARGES   = 2;      // uses per life
 
 		void spawn_entities() const;
-		void reset() const;	
+		void reset() const;
+		void clear_game_entities() const;
 
 		void select_input() const;
 		void select_draw() const;
@@ -46,7 +47,10 @@ namespace ci
 		void hazard_move_system() const;
 		void shield_system() const;
 		void collision_system() const;
+		void splash_system() const;
+		void draw_background() const;
 		void draw_system() const;
+		void draw_level_splash() const;
 		void endgame_draw() const;
 
 		SDL_Window*		        win            = nullptr;
@@ -54,6 +58,7 @@ namespace ci
 		mutable SDL_Texture*	player_texture = nullptr;
 		mutable SDL_Texture*	enemy_texture  = nullptr;
 		mutable int _current_level = 1;
+		mutable int _score         = 0;
 		mutable SDL_Texture* haz_textures[3] = {nullptr, nullptr, nullptr};
 
 		mutable GameState _state = GameState::Select;

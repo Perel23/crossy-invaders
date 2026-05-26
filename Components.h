@@ -21,7 +21,8 @@ namespace ci
 	using Invincibility = struct { int frames; };
 	using FormationState = struct { int dir; Uint64 moveTimer; Uint64 shootTimer; };
 	using GameStatus = struct { bool gameOver; bool won; };
-	using SelectState = struct { int selected; bool moved; };
+	using SelectState  = struct { int selected; bool moved; };
+	using LevelSplash  = struct { int framesLeft; };
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;
@@ -55,4 +56,7 @@ template <> struct bagel::Storage<ci::Invincibility> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::Shelter> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::Shelter>;
+};
+template <> struct bagel::Storage<ci::LevelSplash> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::LevelSplash>;
 };
