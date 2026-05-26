@@ -267,6 +267,17 @@ namespace ci
           .set<LanePos>()
           .set<Transform>()
           .build();
+       static const Mask enemyMask = MaskBuilder().set<EnemyTag>().build();
+
+       // Check if enemies exist to lock the top screen border
+       bool anyEnemy = false;
+       for (Entity e = Entity::first(); !e.eof(); e.next()) {
+          if (e.test(enemyMask)) { anyEnemy = true; break; }
+       }
+
+       // If enemies are alive, max lane is LANES - 1 (stays on screen).
+       // If enemies are dead, max lane is LANES (allows stepping off the top to win).
+       int max_lane = anyEnemy ? LANES - 1 : LANES;
 
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (!e.test(mask)) continue;
@@ -287,7 +298,7 @@ namespace ci
              s.moved = false;
           }
 
-          lp.lane = clamp(lp.lane, 0, LANES - 1);
+          lp.lane = clamp(lp.lane, 0, max_lane);
           lp.col  = clamp(lp.col,  0, COLS  - 1);
 
           t.p.x = TILE / 2.f + lp.col  * TILE;
@@ -567,7 +578,17 @@ namespace ci
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (e.test(enemyMask)) { anyEnemy = true; break; }
        }
-       if (!anyEnemy) gs.won = true;
+
+       // WIN CONDITION UPDATE: Enemies dead AND Player reached top of screen
+       if (!anyEnemy) {
+          for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
+             if (!pl.test(playerMask)) continue;
+             if (pl.get<Transform>().p.y < 0.f) {
+                gs.won = true;
+             }
+             break;
+          }
+       }
     }
 
     void Game::draw_system() const
@@ -715,8 +736,6 @@ namespace ci
                 shield_system();
                 collision_system();
 
-                // Re-read: collision_system may have just set a flag.
-                // We update gameOver and won flags FIRST.
                 for (Entity e = Entity::first(); !e.eof(); e.next()) {
                    if (e.test(gsMask)) {
                       gameOver = e.get<GameStatus>().gameOver;
@@ -725,7 +744,6 @@ namespace ci
                    }
                 }
 
-                // Only AFTER updating the flags do we check if we should transition levels.
                 if (won) {
                    if (_current_level < 3) {
                       _current_level++;
@@ -764,7 +782,7 @@ namespace ci
              }
              if (e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_R &&
                 (gameOver || won)) {
-                _current_level = 1; // FIXED: Ensures the game properly resets to Level 1
+                _current_level = 1;
                 reset();
              }
           }
