@@ -20,9 +20,15 @@ namespace ci
 	struct Shelter {};
 	using Invincibility = struct { int frames; };
 	using FormationState = struct { int dir; Uint64 moveTimer; Uint64 shootTimer; };
-	using GameStatus = struct { bool gameOver; bool won; };
+	using GameStatus = struct { bool gameOver; bool won; bool sfxPlayed; };
 	using SelectState  = struct { int selected; bool moved; };
 	using LevelSplash  = struct { int framesLeft; };
+	using DamageFlash  = struct { int frames; };
+	using ScreenShake  = struct { int frames; };
+	using Explosion    = struct { int frames; int maxFrames; float startSize; };
+	using Pickup       = struct { int type; };    // 0=rapid-fire  1=+shield  2=+health
+	using RapidFire    = struct { int frames; int cooldown; };
+	using ComboState   = struct { int count; int timer; int multiplier; };
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;
@@ -59,4 +65,22 @@ template <> struct bagel::Storage<ci::Shelter> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::LevelSplash> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LevelSplash>;
+};
+template <> struct bagel::Storage<ci::DamageFlash> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::DamageFlash>;
+};
+template <> struct bagel::Storage<ci::ScreenShake> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::ScreenShake>;
+};
+template <> struct bagel::Storage<ci::Explosion> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Explosion>;
+};
+template <> struct bagel::Storage<ci::Pickup> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::Pickup>;
+};
+template <> struct bagel::Storage<ci::RapidFire> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::RapidFire>;
+};
+template <> struct bagel::Storage<ci::ComboState> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::ComboState>;
 };

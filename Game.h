@@ -3,10 +3,11 @@
 #include <SDL3_image/SDL_image.h>
 #include "bagel.h"
 #include "Components.h"
+#include <vector>
 
 namespace ci
 {
-	enum class GameState { Select, Playing, LevelTransition };
+	enum class GameState { Select, Playing, LevelTransition, Paused };
 
 	class Game
 	{
@@ -47,19 +48,29 @@ namespace ci
 		void hazard_move_system() const;
 		void shield_system() const;
 		void collision_system() const;
+		void explosion_system() const;
+		void pickup_system() const;
+		void combo_system() const;
 		void splash_system() const;
+		void play_sfx(int type) const;
 		void draw_background() const;
 		void draw_system() const;
 		void draw_level_splash() const;
+		void draw_pause() const;
 		void endgame_draw() const;
 
 		SDL_Window*		        win            = nullptr;
 		SDL_Renderer*	        ren            = nullptr;
 		mutable SDL_Texture*	player_texture = nullptr;
 		mutable SDL_Texture*	enemy_texture  = nullptr;
-		mutable int _current_level = 1;
-		mutable int _score         = 0;
-		mutable SDL_Texture* haz_textures[3] = {nullptr, nullptr, nullptr};
+		mutable int _current_level    = 1;
+		mutable int _score            = 0;
+		mutable int _high_score       = 0;
+		mutable int _wave_enemy_count = 0;
+		mutable SDL_Texture* haz_textures[3]   = {nullptr, nullptr, nullptr};
+		mutable SDL_Texture* trump_select_tex  = nullptr;
+		mutable SDL_Texture* bibi_select_tex   = nullptr;
+		mutable SDL_AudioStream* audio_stream  = nullptr;
 
 		mutable GameState _state = GameState::Select;
 	};

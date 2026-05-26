@@ -1,6 +1,6 @@
 # Crossy Invaders — Session Tracker
 
-## Status: Step 11 complete — ready for Step 12
+## Status: Step 12 complete — game is feature-complete
 
 ---
 
