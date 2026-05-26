@@ -39,7 +39,9 @@ namespace ci
           s = IMG_Load("res/khamenai.png");
           if (s) { boss_texture     = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
           s = IMG_Load("res/hearts_spreadsheet.png");
-          if (s) { hearts_texture   = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+          if (s) { hearts_texture      = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+          s = IMG_Load("res/iron_dome.png");
+          if (s) { iron_dome_texture   = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
        }
 
        // SDL3 audio: open the default playback device as a stream.
@@ -61,6 +63,7 @@ namespace ci
        if (boss_texture)      SDL_DestroyTexture(boss_texture);
        if (shelter_texture)   SDL_DestroyTexture(shelter_texture);
        if (hearts_texture)    SDL_DestroyTexture(hearts_texture);
+       if (iron_dome_texture) SDL_DestroyTexture(iron_dome_texture);
        if (trump_select_tex)  SDL_DestroyTexture(trump_select_tex);
        if (bibi_select_tex)   SDL_DestroyTexture(bibi_select_tex);
        for (int i = 0; i < 4; i++) {
@@ -998,9 +1001,27 @@ namespace ci
           SDL_FRect dest = {t.p.x - d.size.x / 2, t.p.y - d.size.y / 2, d.size.x, d.size.y};
 
           if (e.test(playerMask) && e.get<Shield>().timer > 0.f) {
-             SDL_SetRenderDrawColor(ren, 80, 140, 255, 255);
-             SDL_FRect halo = {dest.x - 7, dest.y - 7, dest.w + 14, dest.h + 14};
-             SDL_RenderFillRect(ren, &halo);
+             // Iron Dome image: 676×369 RGBA, rendered as a dome around the player.
+             // Width ≈ 2× tile, height preserves aspect ratio (369/676 ≈ 0.546).
+             // Slight alpha pulse so it visually "breathes" while active.
+             constexpr float DOME_W = Game::TILE * 2.1f;
+             constexpr float DOME_H = DOME_W * (369.f / 676.f);
+             const SDL_FRect domeRect = {
+                t.p.x - DOME_W / 2.f,
+                t.p.y - DOME_H / 2.f,
+                DOME_W, DOME_H
+             };
+             if (iron_dome_texture) {
+                // Pulse: timer counts down from SHIELD_DURATION (300) to 0.
+                const float phase = e.get<Shield>().timer / SHIELD_DURATION;
+                const Uint8 alpha = static_cast<Uint8>(180 + 60 * std::abs(std::sin(phase * 12.f)));
+                SDL_SetTextureAlphaMod(iron_dome_texture, alpha);
+                SDL_RenderTexture(ren, iron_dome_texture, nullptr, &domeRect);
+                SDL_SetTextureAlphaMod(iron_dome_texture, 255);
+             } else {
+                SDL_SetRenderDrawColor(ren, 80, 140, 255, 255);
+                SDL_RenderFillRect(ren, &domeRect);
+             }
           }
 
           if (e.test(playerMask)) {
