@@ -12,6 +12,7 @@ namespace ci
 	};
 	using InputState = struct { bool up, down, left, right, moved, shoot, shotFired, activate, activateFired; };
 	struct EnemyTag {};
+	struct BossTag {};   // marks the level-3 boss; also carries EnemyTag
 	using BulletTag = struct { bool fromPlayer; };
 	using Velocity = struct { float dx, dy; };
 	using Health = struct { int hp; };
@@ -41,6 +42,9 @@ template <> struct bagel::Storage<ci::InputState> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::EnemyTag> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::EnemyTag>;
+};
+template <> struct bagel::Storage<ci::BossTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::BossTag>;
 };
 template <> struct bagel::Storage<ci::BulletTag> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::BulletTag>;

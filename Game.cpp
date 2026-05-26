@@ -34,6 +34,10 @@ namespace ci
           if (s) { trump_select_tex = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
           s = IMG_Load("res/bibi_pixel.png");
           if (s) { bibi_select_tex  = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+          s = IMG_Load("res/miklat.png");
+          if (s) { shelter_texture  = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+          s = IMG_Load("res/khamenai.png");
+          if (s) { boss_texture     = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
        }
 
        // SDL3 audio: open the default playback device as a stream.
@@ -52,9 +56,11 @@ namespace ci
     {
        if (player_texture)    SDL_DestroyTexture(player_texture);
        if (enemy_texture)     SDL_DestroyTexture(enemy_texture);
+       if (boss_texture)      SDL_DestroyTexture(boss_texture);
+       if (shelter_texture)   SDL_DestroyTexture(shelter_texture);
        if (trump_select_tex)  SDL_DestroyTexture(trump_select_tex);
        if (bibi_select_tex)   SDL_DestroyTexture(bibi_select_tex);
-       for (int i = 0; i < 3; i++) {
+       for (int i = 0; i < 4; i++) {
           if (haz_textures[i]) SDL_DestroyTexture(haz_textures[i]);
        }
        if (audio_stream) SDL_DestroyAudioStream(audio_stream);
@@ -71,9 +77,10 @@ namespace ci
        const char* hazard_files[] = {
           "res/usa_presidential_limousine.png",
           "res/wing_of_zion.png",
-          "res/tank_merkava_4.png"
+          "res/tank_merkava_4.png",
+          "res/iranian_karrar_tank.png"
        };
-       for (int i = 0; i < 3; i++) {
+       for (int i = 0; i < 4; i++) {
           if (haz_textures[i]) { SDL_DestroyTexture(haz_textures[i]); haz_textures[i] = nullptr; }
           SDL_Surface* surf = IMG_Load(hazard_files[i]);
           if (surf) {
@@ -123,6 +130,7 @@ namespace ci
              Drawable{{0, 0, 0, 0}, {TILE * 3.f, TILE * 3.f}}, // 3x3 Size
              LanePos{ENEMY_TOP_LANE, COLS / 2},
              EnemyTag{},
+             BossTag{},
              Health{40} // High Boss HP
           );
        } else {
@@ -171,7 +179,7 @@ namespace ci
                 Drawable{{0, 0, 0, 0}, {HAZARD_W, HAZARD_H}},
                 Velocity{def.dx, 0.f},
                 Hazard{},
-                HazardVisual{(def.tex + h_idx) % 3});
+                HazardVisual{h_idx % 4});
              h_idx++;
           }
        }
@@ -407,7 +415,7 @@ namespace ci
           if (e.test(anyMask)) e.destroy();
        if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
        if (enemy_texture)  { SDL_DestroyTexture(enemy_texture);  enemy_texture  = nullptr; }
-       for (int i = 0; i < 3; i++) {
+       for (int i = 0; i < 4; i++) {
           if (haz_textures[i]) { SDL_DestroyTexture(haz_textures[i]); haz_textures[i] = nullptr; }
        }
     }
@@ -934,6 +942,7 @@ namespace ci
 
        static const Mask drawMask     = MaskBuilder().set<Transform>().set<Drawable>().build();
        static const Mask playerMask   = MaskBuilder().set<PlayerTag>().set<Shield>().build();
+       static const Mask bossMask     = MaskBuilder().set<BossTag>().set<Health>().build();
        static const Mask enemyMask    = MaskBuilder().set<EnemyTag>().set<Health>().build();
        static const Mask bulletMask   = MaskBuilder().set<BulletTag>().build();
        static const Mask shelterDMsk  = MaskBuilder().set<Shelter>().set<Health>().build();
@@ -994,15 +1003,34 @@ namespace ci
                 e.get<BulletTag>().fromPlayer ? 255 : 140, 0, 255);
              SDL_RenderFillRect(ren, &dest);
           } else if (e.test(shelterDMsk)) {
-             const Uint8 v = static_cast<Uint8>(50 + e.get<Health>().hp * 26);
-             SDL_SetRenderDrawColor(ren, v, v, v, 255);
-             SDL_RenderFillRect(ren, &dest);
+             // Darken the shelter image as it takes damage (HP 5→1).
+             const Uint8 v = static_cast<Uint8>(80 + e.get<Health>().hp * 35);
+             if (shelter_texture) {
+                SDL_SetTextureColorMod(shelter_texture, v, v, v);
+                SDL_RenderTexture(ren, shelter_texture, nullptr, &dest);
+                SDL_SetTextureColorMod(shelter_texture, 255, 255, 255);
+             } else {
+                SDL_SetRenderDrawColor(ren, v, v, v, 255);
+                SDL_RenderFillRect(ren, &dest);
+             }
           } else if (e.test(hazardVisMsk)) {
-             int idx = e.get<HazardVisual>().tex_index;
+             const int idx = e.get<HazardVisual>().tex_index;
              if (haz_textures[idx]) SDL_RenderTexture(ren, haz_textures[idx], nullptr, &dest);
              else { SDL_SetRenderDrawColor(ren, 0, 200, 220, 255); SDL_RenderFillRect(ren, &dest); }
+          } else if (e.test(bossMask)) {
+             // Boss: khamenai texture, tints redder as HP drops.
+             const int hp = e.get<Health>().hp;
+             const Uint8 g = static_cast<Uint8>(255 * hp / BOSS_HP);
+             if (boss_texture) {
+                SDL_SetTextureColorMod(boss_texture, 255, g, g);
+                SDL_RenderTexture(ren, boss_texture, nullptr, &dest);
+                SDL_SetTextureColorMod(boss_texture, 255, 255, 255);
+             } else {
+                SDL_SetRenderDrawColor(ren, 200, 0, 0, 255);
+                SDL_RenderFillRect(ren, &dest);
+             }
           } else if (e.test(enemyMask)) {
-             // HP tinting: damaged enemies turn red.
+             // Regular enemies: HP tinting.
              const int hp    = e.get<Health>().hp;
              const int maxHp = _current_level;
              if (enemy_texture) {

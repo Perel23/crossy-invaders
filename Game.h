@@ -61,13 +61,15 @@ namespace ci
 
 		SDL_Window*		        win            = nullptr;
 		SDL_Renderer*	        ren            = nullptr;
-		mutable SDL_Texture*	player_texture = nullptr;
-		mutable SDL_Texture*	enemy_texture  = nullptr;
+		mutable SDL_Texture*	player_texture   = nullptr;
+		mutable SDL_Texture*	enemy_texture    = nullptr;
+		mutable SDL_Texture*	boss_texture     = nullptr;
+		mutable SDL_Texture*	shelter_texture  = nullptr;
 		mutable int _current_level    = 1;
 		mutable int _score            = 0;
 		mutable int _high_score       = 0;
 		mutable int _wave_enemy_count = 0;
-		mutable SDL_Texture* haz_textures[3]   = {nullptr, nullptr, nullptr};
+		mutable SDL_Texture* haz_textures[4]   = {nullptr, nullptr, nullptr, nullptr};
 		mutable SDL_Texture* trump_select_tex  = nullptr;
 		mutable SDL_Texture* bibi_select_tex   = nullptr;
 		mutable SDL_AudioStream* audio_stream  = nullptr;
