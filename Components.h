@@ -10,7 +10,7 @@ namespace ci
 	struct HazardVisual {
 		int tex_index;
 	};
-	using InputState = struct { bool up, down, left, right, moved, shoot, shotFired, activate, activateFired; };
+	using InputState = struct { bool up, down, left, right, moved, shoot, shotFired, activate, activateFired, dash, slowmo, slowmoFired; };
 	struct EnemyTag {};
 	struct BossTag {};   // marks the level-3 boss; also carries EnemyTag
 	using BulletTag = struct { bool fromPlayer; };
@@ -21,8 +21,8 @@ namespace ci
 	struct Shelter {};
 	using Invincibility = struct { int frames; };
 	using FormationState = struct { int dir; Uint64 moveTimer; Uint64 shootTimer; };
-	using GameStatus = struct { bool gameOver; bool won; bool sfxPlayed; };
-	using SelectState  = struct { int selected; bool moved; };
+	using GameStatus = struct { bool gameOver; bool won; bool sfxPlayed; int kills; int shots; int hits; Uint64 waveStartTime; Uint64 waveEndTime; };
+	using SelectState  = struct { int selected; bool moved; int difficulty; };  // difficulty: 0=Easy 1=Normal 2=Hard
 	using LevelSplash  = struct { int framesLeft; };
 	using DamageFlash  = struct { int frames; };
 	using ScreenShake  = struct { int frames; };
@@ -31,6 +31,10 @@ namespace ci
 	using RapidFire    = struct { int frames; int cooldown; };
 	using ComboState      = struct { int count; int timer; int multiplier; };
 	using IndividualMove  = struct { Uint64 nextMove; };
+	using DashState    = struct { int cooldown; };
+	using SpreadShot   = struct { int frames; };
+	using FloatingText = struct { int frames; int maxFrames; int value; int mult; };
+	using SlowMo       = struct { int frames; int cooldown; };
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;
@@ -91,4 +95,16 @@ template <> struct bagel::Storage<ci::ComboState> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::IndividualMove> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::IndividualMove>;
+};
+template <> struct bagel::Storage<ci::DashState> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::DashState>;
+};
+template <> struct bagel::Storage<ci::SpreadShot> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::SpreadShot>;
+};
+template <> struct bagel::Storage<ci::FloatingText> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::FloatingText>;
+};
+template <> struct bagel::Storage<ci::SlowMo> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::SlowMo>;
 };

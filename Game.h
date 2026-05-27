@@ -54,7 +54,10 @@ namespace ci
 		void pickup_system() const;
 		void combo_system() const;
 		void splash_system() const;
+		void floating_text_system() const;
 		void play_sfx(int type) const;
+		void load_high_score();
+		void save_high_score() const;
 		void draw_background() const;
 		void draw_system() const;
 		void draw_level_splash() const;
@@ -81,6 +84,8 @@ namespace ci
 
 		mutable float        _camera_scroll  = 0.f;   // px added to every rendered Y (grows → entities scroll down)
 		mutable int          _camera_grace   = 180;   // frames before camera starts moving
+		mutable float        _select_scroll  = 0.f;   // animated select-screen background offset
+		mutable int          _difficulty     = 1;     // 0=Easy 1=Normal 2=Hard (cached at game start)
 
 		mutable GameState _state = GameState::Select;
 	};

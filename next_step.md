@@ -1,6 +1,6 @@
 # Crossy Invaders — Session Tracker
 
-## Status: Step 12 complete — game is feature-complete
+## Status: Step 13 complete — all 16 polish improvements implemented
 
 ---
 
@@ -98,7 +98,32 @@
 
 ---
 
-## Next step to do → Step 12: Sound & Final Polish
+## Next step to do → (game is complete — see upcoming steps for optional extras)
+
+---
+
+### ✅ Step 13 — 16-improvement mega-update (2026-05-27)
+
+1. **Dodge/dash** — SHIFT+direction: 2-tile hop, 60-frame cooldown, 12-frame invincibility; `DashState` component on player; cyan refill bar above sprite
+2. **Bullet-time (SlowMo)** — Q key: 3 s slow mode (enemy bullets at 35% speed, formation 3× slower), 10 s cooldown; blue overlay tint; bar + "SLOW" label top-right; `SlowMo` component on GameStatus entity; sfx case 6 (whoosh)
+3. **Enemy row variety** — front row has 3× weight in random shooter selection; back rows tinted progressively cooler/bluer via `SDL_SetTextureColorMod`
+4. **Spread-shot pickup** — purple type-3 pickup; `SpreadShot` component on player; 300-frame duration; purple timer bar under player; fires 3-bullet cone
+5. **Pickup labels** — single letter (R/S/H/W) drawn over every pickup square
+6. **Power-up timer bars** — RapidFire (yellow) and SpreadShot (purple) thin bars beneath player sprite; dash cooldown refill bar (cyan) above sprite
+7. **Off-screen enemy warning arrows** — upward yellow triangles drawn at top edge via `SDL_RenderGeometry` for any enemy with screenY < 0
+8. **End-of-level stats** — Kills / Accuracy (%) / Time (s) displayed on the level-transition splash; `waveStartTime`+`waveEndTime` in `GameStatus`
+9. **Persistent high score** — `highscore.dat` written on every new best; `load_high_score()` in constructor; `save_high_score()` called on beat
+10. **Player low-HP tinting** — `SDL_SetTextureColorMod(player_texture, 255, 80, 80)` when HP == 1
+11. **Per-row enemy tinting** — depth computed from `LanePos.lane - minEnemyLane`; each step back reduces R/G, keeps B=255
+12. **Floating score pop-ups** — `FloatingText` component; entities float upward 1.2 px/frame for 50 frames; `+N×M` text drawn in gold
+13. **Animated select background** — parallax star-field (two layers, different scroll rates) driven by `_select_scroll` member
+14. **Footstep dust** — small `Explosion{8,8,10}` entity spawned at old player position on every hop (including dash)
+15. **Difficulty selection** — Easy/Normal/Hard on select screen (UP/DN keys); `SelectState.difficulty`; speed multipliers applied in enemy_move_system + shoot_system
+16. **Level 4 role reversal** — player spawns at lane 9 (top); 2×8 enemies at lanes 2–3; enemies advance **upward** on edge hit; player bullets go down, enemy bullets go up; game over if enemy reaches lane ≥ 8; deep-space background; camera scroll disabled
+
+---
+
+## Previous next step (now complete)
 
 **Goal**: Add audio feedback and tighten the overall feel.
 
