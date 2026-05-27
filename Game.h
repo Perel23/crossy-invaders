@@ -86,6 +86,11 @@ namespace ci
 		mutable int          _camera_grace   = 180;   // frames before camera starts moving
 		mutable float        _select_scroll  = 0.f;   // animated select-screen background offset
 		mutable int          _difficulty     = 1;     // 0=Easy 1=Normal 2=Hard (cached at game start)
+		// Previous-wave stats saved before spawn_enemy_wave() resets them, used by draw_level_splash()
+		mutable int          _prev_kills     = 0;
+		mutable int          _prev_shots     = 0;
+		mutable int          _prev_hits      = 0;
+		mutable int          _prev_wave_secs = 0;
 
 		mutable GameState _state = GameState::Select;
 	};

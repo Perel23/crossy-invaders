@@ -135,7 +135,7 @@ namespace ci
             Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
             LanePos{startLane, startCol},
             PlayerTag{},
-            InputState{},
+            InputState{false,false,false,false,false,false,/*shotFired=*/true,false,false,false,false,false},
             Health{3},
             Shield{0.f, SHIELD_CHARGES},
             Invincibility{0},
@@ -582,44 +582,148 @@ namespace ci
 
     void Game::draw_level_splash() const
     {
+        // Read framesLeft to drive phase-based animation
+        static const Mask splashMask2 = MaskBuilder().set<LevelSplash>().build();
+        int framesLeft = 150;
+        for (Entity e = Entity::first(); !e.eof(); e.next())
+            if (e.test(splashMask2)) { framesLeft = e.get<LevelSplash>().framesLeft; break; }
+
+        // ── LEVEL 4: three-phase dramatic surprise reveal ──────────────────────
+        if (_current_level == 4) {
+            // Phase 1 (frames 300→241): victory celebration with stats
+            if (framesLeft > 240) {
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(ren, 0, 20, 0, 200);
+                SDL_FRect full = {0,0,(float)WIN_W,(float)WIN_H}; SDL_RenderFillRect(ren, &full);
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+
+                SDL_SetRenderScale(ren, 5.f, 5.f);
+                SDL_SetRenderDrawColor(ren, 80, 255, 80, 255);
+                SDL_RenderDebugText(ren, 60.f, 34.f, "BOSS DEFEATED!");
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+
+                const int acc = _prev_shots > 0 ? (_prev_hits * 100 / _prev_shots) : 0;
+                char sb[64];
+                SDL_SetRenderScale(ren, 2.f, 2.f);
+                SDL_SetRenderDrawColor(ren, 160, 255, 160, 255);
+                SDL_snprintf(sb, sizeof(sb), "Kills: %d   Accuracy: %d%%   Time: %ds",
+                             _prev_kills, acc, _prev_wave_secs);
+                SDL_RenderDebugText(ren, 30.f, 130.f, sb);
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+            }
+            // Phase 2 (frames 240→151): ominous "but wait…"
+            else if (framesLeft > 150) {
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(ren, 20, 0, 0, 200);
+                SDL_FRect full = {0,0,(float)WIN_W,(float)WIN_H}; SDL_RenderFillRect(ren, &full);
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+
+                const bool blink = (SDL_GetTicks() / 300) % 2 == 0;
+                if (blink) {
+                    SDL_SetRenderScale(ren, 6.f, 6.f);
+                    SDL_SetRenderDrawColor(ren, 255, 60, 20, 255);
+                    SDL_RenderDebugText(ren, 42.f, 42.f, "BUT WAIT...");
+                    SDL_SetRenderScale(ren, 1.f, 1.f);
+                }
+                SDL_SetRenderScale(ren, 2.f, 2.f);
+                SDL_SetRenderDrawColor(ren, 160, 100, 80, 255);
+                SDL_RenderDebugText(ren, 170.f, 200.f, "...something is coming...");
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+            }
+            // Phase 3 (frames 150→0): FULL SURPRISE REVEAL
+            else {
+                // Red alarm flash
+                const bool alarm = (SDL_GetTicks() / 200) % 2 == 0;
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(ren, alarm ? 80 : 20, 0, 0, 210);
+                SDL_FRect full = {0,0,(float)WIN_W,(float)WIN_H}; SDL_RenderFillRect(ren, &full);
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+
+                SDL_SetRenderScale(ren, 3.5f, 3.5f);
+                SDL_SetRenderDrawColor(ren, 255, 30, 30, 255);
+                SDL_RenderDebugText(ren, 24.f, 22.f, "THEY SURVIVED THE STRIKE!");
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+
+                SDL_SetRenderScale(ren, 2.5f, 2.5f);
+                SDL_SetRenderDrawColor(ren, 255, 200, 30, 255);
+                SDL_RenderDebugText(ren, 48.f, 68.f, "ATTACKING FROM BELOW!");
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+
+                SDL_SetRenderScale(ren, 3.f, 3.f);
+                SDL_SetRenderDrawColor(ren, 80, 220, 255, 255);
+                SDL_RenderDebugText(ren, 42.f, 110.f, "YOU ARE THE INVADER NOW");
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+
+                SDL_SetRenderScale(ren, 2.f, 2.f);
+                SDL_SetRenderDrawColor(ren, 180, 180, 180, 255);
+                SDL_RenderDebugText(ren, 158.f, 175.f, "Shoot  D O W N  this time!");
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+            }
+            return;
+        }
+
+        // ── Regular level transition (levels 1→2, 2→3) ────────────────────────
         SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(ren, 0, 0, 0, 170);
+        SDL_SetRenderDrawColor(ren, 0, 0, 0, 175);
         SDL_FRect full = {0, 0, (float)WIN_W, (float)WIN_H};
         SDL_RenderFillRect(ren, &full);
         SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
 
-        SDL_SetRenderScale(ren, 5.f, 5.f);
-        SDL_SetRenderDrawColor(ren, 80, 255, 80, 255);
+        // Central card — screen Y 194–474 (height 280)
+        SDL_SetRenderDrawColor(ren, 80, 220, 80, 255);   // green border
+        SDL_FRect cardBorder = {259.f, 194.f, 506.f, 286.f};
+        SDL_RenderFillRect(ren, &cardBorder);
+        SDL_SetRenderDrawColor(ren, 20, 55, 20, 255);    // dark green fill
+        SDL_FRect card = {262.f, 197.f, 500.f, 280.f};
+        SDL_RenderFillRect(ren, &card);
+
+        // ── Title "LEVEL X"  — screen y=212, bottom=252  (scale 5 → char=40px tall)
+        // canvas y = 212/5 = 42.4 → 42
+        // "LEVEL 1" = 7 chars; "LEVEL 10" = 8 chars; centred on screen
         char buf[32];
         SDL_snprintf(buf, sizeof(buf), "LEVEL %d", _current_level);
-        SDL_RenderDebugText(ren, 65.f, 46.f, buf);
+        const int titleChars = (int)SDL_strlen(buf);
+        SDL_SetRenderScale(ren, 5.f, 5.f);
+        SDL_SetRenderDrawColor(ren, 80, 255, 80, 255);
+        SDL_RenderDebugText(ren, (WIN_W / 5.f - titleChars * 8.f) / 2.f, 42.f, buf);
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
+        // Divider at screen y=260
+        SDL_SetRenderDrawColor(ren, 50, 130, 50, 255);
+        SDL_FRect div1 = {282.f, 260.f, 460.f, 1.f};
+        SDL_RenderFillRect(ren, &div1);
+
+        // ── "Get ready..."  — screen y=270, bottom=286  (scale 2 → char=16px tall)
+        // canvas y = 270/2 = 135;  "Get ready..." = 12 chars × 8 × 2 = 192px; centre x = (512-192)/2 = 160
         SDL_SetRenderScale(ren, 2.f, 2.f);
-        SDL_SetRenderDrawColor(ren, 160, 160, 160, 255);
-        SDL_RenderDebugText(ren, 182.f, 105.f, "Get ready...");
+        SDL_SetRenderDrawColor(ren, 140, 200, 140, 255);
+        SDL_RenderDebugText(ren, 160.f, 135.f, "Get ready...");
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
-        // Wave stats from previous level
-        static const Mask gsMask = MaskBuilder().set<GameStatus>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(gsMask)) continue;
-            const auto& gs = e.get<GameStatus>();
-            Uint64 endT    = gs.waveEndTime > 0 ? gs.waveEndTime : SDL_GetTicks();
-            const int secs = (int)((endT - gs.waveStartTime) / 1000);
-            const int acc  = gs.shots > 0 ? (gs.hits * 100 / gs.shots) : 0;
-            char statBuf[64];
-            SDL_SetRenderScale(ren, 2.f, 2.f);
-            SDL_SetRenderDrawColor(ren, 160, 220, 160, 255);
-            SDL_snprintf(statBuf, sizeof(statBuf), "Kills: %d", gs.kills);
-            SDL_RenderDebugText(ren, 80.f, 130.f, statBuf);
+        // Divider at screen y=300
+        SDL_SetRenderDrawColor(ren, 50, 130, 50, 255);
+        SDL_FRect div2 = {282.f, 300.f, 460.f, 1.f};
+        SDL_RenderFillRect(ren, &div2);
+
+        // ── Stats  — scale 2; three rows starting at screen y=314
+        // canvas y = 314/2 = 157;  row spacing = 26px screen = 13 canvas
+        const int acc = _prev_shots > 0 ? (_prev_hits * 100 / _prev_shots) : 0;
+        char statBuf[48];
+        SDL_SetRenderScale(ren, 2.f, 2.f);
+        SDL_SetRenderDrawColor(ren, 160, 220, 160, 255);
+
+        SDL_snprintf(statBuf, sizeof(statBuf), "Kills: %d", _prev_kills);
+        SDL_RenderDebugText(ren, 157.f, 157.f, statBuf);  // screen y=314
+
+        if (_prev_shots > 0)
             SDL_snprintf(statBuf, sizeof(statBuf), "Accuracy: %d%%", acc);
-            SDL_RenderDebugText(ren, 80.f, 150.f, statBuf);
-            SDL_snprintf(statBuf, sizeof(statBuf), "Time: %ds", secs);
-            SDL_RenderDebugText(ren, 80.f, 170.f, statBuf);
-            SDL_SetRenderScale(ren, 1.f, 1.f);
-            break;
-        }
+        else
+            SDL_snprintf(statBuf, sizeof(statBuf), "Accuracy: --");
+        SDL_RenderDebugText(ren, 157.f, 170.f, statBuf);  // screen y=340
+
+        SDL_snprintf(statBuf, sizeof(statBuf), "Time: %ds", _prev_wave_secs);
+        SDL_RenderDebugText(ren, 157.f, 183.f, statBuf);  // screen y=366
+        SDL_SetRenderScale(ren, 1.f, 1.f);
     }
 
     // ──────────────────────── Select screen ──────────────────────────────────────
@@ -656,95 +760,234 @@ namespace ci
                 break;
             }
 
-        // ── Animated starfield background ──
-        SDL_SetRenderDrawColor(ren, 5, 5, 20, 255);
+        // ── Deep-space animated starfield ──
+        SDL_SetRenderDrawColor(ren, 4, 4, 18, 255);
         SDL_FRect bg = {0, 0, (float)WIN_W, (float)WIN_H};
         SDL_RenderFillRect(ren, &bg);
-        SDL_SetRenderDrawColor(ren, 80, 80, 130, 255);
-        for (int i = 0; i < 70; i++) {
-            float x = (float)((i * 137 + 23) % WIN_W);
-            float y = (float)(((int)(_select_scroll * 0.4f) + i * 89) % WIN_H);
-            SDL_FRect star = {x, y, 1.f, 1.f};
-            SDL_RenderFillRect(ren, &star);
+        // slow layer
+        SDL_SetRenderDrawColor(ren, 60, 60, 110, 255);
+        for (int i = 0; i < 80; i++) {
+            float sx = (float)((i * 137 + 23) % WIN_W);
+            float sy = (float)(((int)(_select_scroll * 0.35f) + i * 89) % WIN_H);
+            SDL_FRect star = {sx, sy, 1.f, 1.f}; SDL_RenderFillRect(ren, &star);
         }
+        // fast layer
         SDL_SetRenderDrawColor(ren, 200, 200, 255, 255);
-        for (int i = 0; i < 25; i++) {
-            float x = (float)((i * 317 + 71) % WIN_W);
-            float y = (float)(((int)(_select_scroll * 1.0f) + i * 157) % WIN_H);
-            SDL_FRect star = {x, y, 2.f, 2.f};
-            SDL_RenderFillRect(ren, &star);
+        for (int i = 0; i < 30; i++) {
+            float sx = (float)((i * 317 + 71) % WIN_W);
+            float sy = (float)(((int)(_select_scroll * 0.9f) + i * 157) % WIN_H);
+            SDL_FRect star = {sx, sy, 2.f, 2.f}; SDL_RenderFillRect(ren, &star);
         }
 
-        // ── Character boxes ──
-        constexpr float BOX_W = 200.f, BOX_H = 240.f, BOX_GAP = 80.f;
-        constexpr float TRUMP_X = (WIN_W - 2 * BOX_W - BOX_GAP) / 2.f;
-        constexpr float BIBI_X  = TRUMP_X + BOX_W + BOX_GAP;
-        constexpr float BOX_Y   = (WIN_H - BOX_H) / 2.f - 30.f;
+        // ── Title panel  (Y: 0 → 82) ──
+        // Panel bg — dark navy, compact so images get maximum room
+        SDL_SetRenderDrawColor(ren, 8, 12, 38, 255);
+        SDL_FRect titlePanel = {0.f, 0.f, (float)WIN_W, 82.f};
+        SDL_RenderFillRect(ren, &titlePanel);
+        SDL_SetRenderDrawColor(ren, 60, 90, 200, 255);
+        SDL_FRect titleBorder = {0.f, 80.f, (float)WIN_W, 2.f};
+        SDL_RenderFillRect(ren, &titleBorder);
 
-        const float selX = (selected == 0) ? TRUMP_X : BIBI_X;
-        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-        SDL_FRect selBorder = {selX - 6.f, BOX_Y - 6.f, BOX_W + 12.f, BOX_H + 12.f};
-        SDL_RenderFillRect(ren, &selBorder);
-
-        SDL_SetRenderDrawColor(ren, 220, 120, 30, 255);
-        SDL_FRect trumpBox = {TRUMP_X, BOX_Y, BOX_W, BOX_H};
-        SDL_RenderFillRect(ren, &trumpBox);
-        SDL_SetRenderDrawColor(ren, 60, 120, 220, 255);
-        SDL_FRect bibiBox = {BIBI_X, BOX_Y, BOX_W, BOX_H};
-        SDL_RenderFillRect(ren, &bibiBox);
-
-        SDL_SetRenderScale(ren, 4.f, 4.f);
-        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-        SDL_RenderDebugText(ren, 72.f, 28.f, "SELECT FIGHTER");
+        // "CROSSY INVADERS" — scale 3: char height 24px
+        // canvas y=9 → screen y=27, bottom=51
+        // 15 chars × 8 = 120 canvas px; canvas width=341.3; centre x=(341.3-120)/2=110
+        SDL_SetRenderScale(ren, 3.f, 3.f);
+        SDL_SetRenderDrawColor(ren, 100, 70, 0, 255);    // shadow
+        SDL_RenderDebugText(ren, 111.f, 10.f, "CROSSY INVADERS");
+        SDL_SetRenderDrawColor(ren, 255, 200, 50, 255);  // gold
+        SDL_RenderDebugText(ren, 110.f, 9.f, "CROSSY INVADERS");
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
-        // Sprites inside boxes
-        constexpr float IMG_PAD = 20.f, IMG_H = BOX_H - 55.f;
+        // Subtitle — scale 1.2: char height ~10px
+        // screen y=60, bottom=70  (9px clear of title bottom=51)
+        // 26 chars × 8 = 208 canvas px; canvas width=853; centre x=(853-208)/2=322
+        SDL_SetRenderScale(ren, 1.2f, 1.2f);
+        SDL_SetRenderDrawColor(ren, 130, 170, 255, 255);
+        SDL_RenderDebugText(ren, 322.f, 60.f / 1.2f, "Stop the Iranian Invasion!");
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Best score — top-right of panel
+        // "BEST XXXXX" = 10 chars × 8 × 1.2 = 96px; right-align
+        SDL_SetRenderScale(ren, 1.2f, 1.2f);
+        SDL_SetRenderDrawColor(ren, 255, 215, 30, 255);
+        char hsbuf[24]; SDL_snprintf(hsbuf, sizeof(hsbuf), "BEST %05d", _high_score);
+        SDL_RenderDebugText(ren, ((float)WIN_W - 104.f) / 1.2f, 9.f, hsbuf);
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // ── Character boxes  (Y: 92 → 402) ──
+        // BOX_H=310 gives images ~260px tall — 80% of the card height
+        constexpr float BOX_W   = 230.f, BOX_H = 310.f, BOX_GAP = 80.f;
+        constexpr float TRUMP_X = (WIN_W - 2.f * BOX_W - BOX_GAP) / 2.f;  // 242
+        constexpr float BIBI_X  = TRUMP_X + BOX_W + BOX_GAP;               // 552
+        constexpr float BOX_Y   = 92.f;
+
+        // Selection glow
+        const float selX = (selected == 0) ? TRUMP_X : BIBI_X;
+        SDL_SetRenderDrawColor(ren, 255, 255, 100, 255);
+        SDL_FRect selGlow = {selX - 6.f, BOX_Y - 6.f, BOX_W + 12.f, BOX_H + 12.f};
+        SDL_RenderFillRect(ren, &selGlow);
+
+        // Trump box
+        SDL_SetRenderDrawColor(ren, 150, 75, 15, 255);
+        SDL_FRect trumpBox = {TRUMP_X, BOX_Y, BOX_W, BOX_H};
+        SDL_RenderFillRect(ren, &trumpBox);
+        SDL_SetRenderDrawColor(ren, 210, 110, 30, 255);
+        SDL_FRect trumpTop = {TRUMP_X, BOX_Y, BOX_W, 30.f};
+        SDL_RenderFillRect(ren, &trumpTop);
+
+        // Bibi box
+        SDL_SetRenderDrawColor(ren, 20, 60, 150, 255);
+        SDL_FRect bibiBox = {BIBI_X, BOX_Y, BOX_W, BOX_H};
+        SDL_RenderFillRect(ren, &bibiBox);
+        SDL_SetRenderDrawColor(ren, 50, 110, 220, 255);
+        SDL_FRect bibiTop = {BIBI_X, BOX_Y, BOX_W, 30.f};
+        SDL_RenderFillRect(ren, &bibiTop);
+
+        // Character names — scale 2: "TRUMP"=80px, "BIBI"=64px
+        SDL_SetRenderScale(ren, 2.f, 2.f);
+        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+        SDL_RenderDebugText(ren, (TRUMP_X + (BOX_W - 80.f)/2.f) / 2.f, (BOX_Y + 9.f) / 2.f, "TRUMP");
+        SDL_RenderDebugText(ren, (BIBI_X  + (BOX_W - 64.f)/2.f) / 2.f, (BOX_Y + 9.f) / 2.f, "BIBI");
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Sprites — fill nearly the full box height below the header strip
+        constexpr float IMG_PAD = 10.f, IMG_H = BOX_H - 40.f;  // 270px tall
         if (trump_select_tex) {
-            SDL_FRect td = {TRUMP_X + IMG_PAD, BOX_Y + IMG_PAD, BOX_W - IMG_PAD*2, IMG_H};
+            SDL_FRect td = {TRUMP_X + IMG_PAD, BOX_Y + 32.f, BOX_W - IMG_PAD*2.f, IMG_H};
             SDL_RenderTexture(ren, trump_select_tex, nullptr, &td);
         }
         if (bibi_select_tex) {
-            SDL_FRect bd = {BIBI_X + IMG_PAD, BOX_Y + IMG_PAD, BOX_W - IMG_PAD*2, IMG_H};
+            SDL_FRect bd = {BIBI_X + IMG_PAD, BOX_Y + 32.f, BOX_W - IMG_PAD*2.f, IMG_H};
             SDL_RenderTexture(ren, bibi_select_tex, nullptr, &bd);
         }
 
-        SDL_SetRenderScale(ren, 3.f, 3.f);
-        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-        SDL_RenderDebugText(ren, 104.f, 73.f, "TRUMP");
-        SDL_RenderDebugText(ren, 201.f, 73.f, "BIBI");
+        // ← → hint — 12px below box bottom (BOX bottom = 92+310 = 402)
+        // "<  LEFT/RIGHT  >" = 16 chars × 8 × 1.2 = 153px; centre x=(1024-153)/2=435; canvas=362
+        SDL_SetRenderScale(ren, 1.2f, 1.2f);
+        SDL_SetRenderDrawColor(ren, 140, 140, 160, 255);
+        SDL_RenderDebugText(ren, 362.f, 414.f / 1.2f, "<  LEFT/RIGHT  >");
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
-        // ── Difficulty selector ──
-        const float diffY = BOX_Y + BOX_H + 20.f;
-        const char* diffLabels[] = {"EASY", "NORMAL", "HARD"};
-        const SDL_Color diffCols[3] = {{80,220,80,255},{200,200,200,255},{220,80,80,255}};
-        SDL_SetRenderScale(ren, 2.f, 2.f);
-        SDL_SetRenderDrawColor(ren, 160, 160, 160, 255);
-        SDL_RenderDebugText(ren, 10.f, diffY / 2.f - 8.f, "DIFFICULTY:  < UP/DN >");
+        // ── Difficulty selector  (Y: 438 → 488) ──
+        constexpr float diffY = 440.f;
+
+        SDL_SetRenderDrawColor(ren, 10, 10, 28, 255);
+        SDL_FRect diffStrip = {0.f, diffY - 6.f, (float)WIN_W, 56.f};
+        SDL_RenderFillRect(ren, &diffStrip);
+        SDL_SetRenderDrawColor(ren, 40, 40, 80, 255);
+        SDL_FRect diffLineTop = {0.f, diffY - 7.f, (float)WIN_W, 1.f};
+        SDL_FRect diffLineBot = {0.f, diffY + 49.f, (float)WIN_W, 1.f};
+        SDL_RenderFillRect(ren, &diffLineTop);
+        SDL_RenderFillRect(ren, &diffLineBot);
+
+        // "DIFFICULTY:" label
+        SDL_SetRenderScale(ren, 1.2f, 1.2f);
+        SDL_SetRenderDrawColor(ren, 130, 130, 180, 255);
+        SDL_RenderDebugText(ren, 16.f, (diffY + 12.f) / 1.2f, "DIFFICULTY:");
         SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Three buttons — centred; each 120×36
+        // Total = 3×120 + 2×18 = 396; start x = (1024-396)/2 = 314
+        const float diffBtnX[3] = {314.f, 452.f, 590.f};
+        const SDL_Color diffBgSel[3]  = {{0,100,0,255},{0,0,100,255},{100,0,0,255}};
+        const SDL_Color diffTxtCol[3] = {{80,255,80,255},{150,220,255,255},{255,80,80,255}};
+        const char* diffLabels[]      = {"  EASY  ", " NORMAL ", "  HARD  "};
         for (int d = 0; d < 3; d++) {
-            float bx = WIN_W / 2.f - 180.f + d * 120.f;
-            bool sel = (d == difficulty);
-            SDL_SetRenderDrawColor(ren, sel ? 255 : 60, sel ? 255 : 60, sel ? 60 : 60, 255);
-            SDL_FRect db = {bx, diffY + 20.f, 100.f, 30.f};
+            const bool sel = (d == difficulty);
+            if (sel) {
+                SDL_SetRenderDrawColor(ren, 255, 255, 80, 255);
+                SDL_FRect bord = {diffBtnX[d] - 2.f, diffY - 2.f, 124.f, 40.f};
+                SDL_RenderFillRect(ren, &bord);
+            }
+            SDL_SetRenderDrawColor(ren, sel ? diffBgSel[d].r : (Uint8)20,
+                                         sel ? diffBgSel[d].g : (Uint8)20,
+                                         sel ? diffBgSel[d].b : (Uint8)30, 255);
+            SDL_FRect db = {diffBtnX[d], diffY, 120.f, 36.f};
             SDL_RenderFillRect(ren, &db);
-            SDL_SetRenderScale(ren, 1.5f, 1.5f);
-            SDL_SetRenderDrawColor(ren, diffCols[d].r, diffCols[d].g, diffCols[d].b, 255);
-            SDL_RenderDebugText(ren, (bx + 10.f) / 1.5f, (diffY + 30.f) / 1.5f, diffLabels[d]);
+            // label at scale 1.6
+            SDL_SetRenderScale(ren, 1.6f, 1.6f);
+            SDL_SetRenderDrawColor(ren, diffTxtCol[d].r, diffTxtCol[d].g, diffTxtCol[d].b, 255);
+            SDL_RenderDebugText(ren, (diffBtnX[d] + 6.f) / 1.6f, (diffY + 11.f) / 1.6f, diffLabels[d]);
             SDL_SetRenderScale(ren, 1.f, 1.f);
         }
-
-        // ── Instructions ──
-        SDL_SetRenderScale(ren, 2.f, 2.f);
-        SDL_SetRenderDrawColor(ren, 180, 180, 180, 255);
-        SDL_RenderDebugText(ren, 10.f, 272.f, "GOAL: Defeat all enemies and reach the top!");
-        SDL_RenderDebugText(ren, 10.f, 290.f, "ARROWS:Move  SPACE:Shoot  I:Iron Dome  P:Pause");
-        SDL_RenderDebugText(ren, 10.f, 306.f, "SHIFT+DIR:Dash  Q:BulletTime");
-        SDL_RenderDebugText(ren, 10.f, 322.f, "PICKUPS: Yellow=Rapid  Blue=Shield  Red=HP  Purple=Wave");
-        SDL_SetRenderDrawColor(ren, 80, 255, 80, 255);
-        SDL_RenderDebugText(ren, 10.f, 342.f, "Press SPACE to play");
+        // "UP/DN" hint
+        SDL_SetRenderScale(ren, 1.2f, 1.2f);
+        SDL_SetRenderDrawColor(ren, 80, 80, 120, 255);
+        SDL_RenderDebugText(ren, (diffBtnX[2] + 130.f) / 1.2f, (diffY + 12.f) / 1.2f, "UP/DN");
         SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // ── Instructions  (Y: 502 → 622)  scale 1.8 ──
+        // Top separator
+        SDL_SetRenderDrawColor(ren, 40, 50, 90, 255);
+        SDL_FRect instrSep = {40.f, 500.f, (float)WIN_W - 80.f, 1.f};
+        SDL_RenderFillRect(ren, &instrSep);
+
+        // Canvas width at scale 1.8 = 1024/1.8 = 568 px
+        // Column layout (all canvas-px):
+        //   C1-key = 10   C1-desc = 100  (longest key "SHIFT+DIR" = 72 px → gap 18)
+        //   C2-key = 215  C2-desc = 265  (longest key "SPACE"     = 40 px → gap 10)
+        //   C3-key = 400  C3-desc = 418  (longest key "I"/"P"     =  8 px → gap 10)
+        //   "Iron Dome" at 418, width 72 → ends 490 < 568 ✓
+        SDL_SetRenderScale(ren, 1.8f, 1.8f);
+
+        SDL_SetRenderDrawColor(ren, 200, 200, 240, 255);
+        SDL_RenderDebugText(ren, 10.f, 510.f / 1.8f, "HOW TO PLAY:");
+
+        // ── Row 1: ARROWS/Move · SPACE/Shoot · I/Iron Dome ──
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren,  10.f, 540.f / 1.8f, "ARROWS");
+        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
+        SDL_RenderDebugText(ren, 100.f, 540.f / 1.8f, "Move");
+
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren, 215.f, 540.f / 1.8f, "SPACE");
+        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
+        SDL_RenderDebugText(ren, 265.f, 540.f / 1.8f, "Shoot");
+
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren, 400.f, 540.f / 1.8f, "I");
+        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
+        SDL_RenderDebugText(ren, 418.f, 540.f / 1.8f, "Iron Dome");
+
+        // ── Row 2: SHIFT+DIR/Dash · Q/Bullet-Time · P/Pause ──
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren,  10.f, 568.f / 1.8f, "SHIFT+DIR");
+        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
+        SDL_RenderDebugText(ren, 100.f, 568.f / 1.8f, "Dash");
+
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren, 215.f, 568.f / 1.8f, "Q");
+        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
+        SDL_RenderDebugText(ren, 228.f, 568.f / 1.8f, "Bullet-Time");  // ends 228+88=316 < 400 ✓
+
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren, 400.f, 568.f / 1.8f, "P");
+        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
+        SDL_RenderDebugText(ren, 418.f, 568.f / 1.8f, "Pause");
+
+        // ── Row 3: Pickups ──
+        // "R=Rapid Fire  S=Shield  H=+Heart  W=Wave Shot" = 46 chars × 8 = 368 → ends 468 < 568 ✓
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren,  10.f, 598.f / 1.8f, "PICKUPS:");
+        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
+        SDL_RenderDebugText(ren, 100.f, 598.f / 1.8f, "R=Rapid Fire   S=Shield   H=+Heart   W=Wave Shot");
+
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Bottom separator
+        SDL_SetRenderDrawColor(ren, 40, 50, 90, 255);
+        SDL_FRect instrSep2 = {40.f, 622.f, (float)WIN_W - 80.f, 1.f};
+        SDL_RenderFillRect(ren, &instrSep2);
+
+        // ── Blinking "PRESS SPACE TO PLAY"  (Y: 710) ──
+        // Pushed down slightly to leave breathing room after the larger instructions block.
+        if ((SDL_GetTicks() / 500) % 2 == 0) {
+            // scale 2: "PRESS  SPACE  TO  PLAY" = 22×8×2=352px; centre x=(1024-352)/2=336; canvas=168
+            SDL_SetRenderScale(ren, 2.f, 2.f);
+            SDL_SetRenderDrawColor(ren, 255, 200, 50, 255);
+            SDL_RenderDebugText(ren, 168.f, 710.f / 2.f, "PRESS  SPACE  TO  PLAY");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
     }
 
     // ────────────────────────────── Game systems ─────────────────────────────────
@@ -1116,9 +1359,17 @@ namespace ci
         }
         if (gsEnt.has<ScreenShake>() && gsEnt.get<ScreenShake>().frames > 0) --gsEnt.get<ScreenShake>().frames;
 
+        // Full-size AABB — used for bullet×shelter, player-bullet×enemy, enemy-body×player.
         auto overlaps = [](SDL_FPoint p1, SDL_FPoint s1, SDL_FPoint p2, SDL_FPoint s2) {
             return std::abs(p1.x - p2.x) < (s1.x + s2.x) * 0.5f &&
                    std::abs(p1.y - p2.y) < (s1.y + s2.y) * 0.5f;
+        };
+        // Tight hitbox (75 % of visual) — used for car×player and enemy-bullet×player.
+        // Y threshold (60+60)*0.375 = 45 px < TILE=64 px → adjacent lanes never trigger.
+        // Car X threshold (124+60)*0.375 = 69 px ≈ 1 tile — only real contact counts.
+        auto overlaps_tight = [](SDL_FPoint p1, SDL_FPoint s1, SDL_FPoint p2, SDL_FPoint s2) {
+            return std::abs(p1.x - p2.x) < (s1.x + s2.x) * 0.375f &&
+                   std::abs(p1.y - p2.y) < (s1.y + s2.y) * 0.375f;
         };
 
         auto hurt_player = [&](Entity pl) {
@@ -1193,14 +1444,14 @@ namespace ci
             }
         }
 
-        // Enemy bullet × player
+        // Enemy bullet × player  (tight hitbox — near-miss bullets should feel like misses)
         for (Entity b = Entity::first(); !b.eof(); b.next()) {
             if (!b.test(bulletMask) || b.get<BulletTag>().fromPlayer) continue;
             const SDL_FPoint bp = b.get<Transform>().p;
             const SDL_FPoint bs = b.get<Drawable>().size;
             for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
                 if (!pl.test(playerMask)) continue;
-                if (!overlaps(bp, bs, pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
+                if (!overlaps_tight(bp, bs, pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
                 if (pl.get<Shield>().timer > 0.f) { b.destroy(); break; }
                 b.destroy();
                 hurt_player(pl);
@@ -1208,14 +1459,14 @@ namespace ci
             }
         }
 
-        // Hazard × player
+        // Hazard × player  (tight hitbox — car must really be on your tile)
         static const Mask hazardMask = MaskBuilder().set<Hazard>().set<Transform>().set<Drawable>().build();
         for (Entity h = Entity::first(); !h.eof(); h.next()) {
             if (!h.test(hazardMask)) continue;
             for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
                 if (!pl.test(playerMask)) continue;
-                if (!overlaps(h.get<Transform>().p, h.get<Drawable>().size,
-                              pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
+                if (!overlaps_tight(h.get<Transform>().p, h.get<Drawable>().size,
+                                    pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
                 hurt_player(pl);
                 break;
             }
@@ -1675,35 +1926,104 @@ namespace ci
 
     void Game::draw_pause() const
     {
-        draw_system();
-        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(ren, 0, 0, 0, 145);
-        SDL_FRect full = {0, 0, (float)WIN_W, (float)WIN_H};
-        SDL_RenderFillRect(ren, &full);
-        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+        // Starfield background (same as select screen)
+        SDL_SetRenderDrawColor(ren, 4, 4, 18, 255);
+        { SDL_FRect full = {0, 0, (float)WIN_W, (float)WIN_H}; SDL_RenderFillRect(ren, &full); }
+        SDL_SetRenderDrawColor(ren, 60, 60, 110, 255);
+        for (int i = 0; i < 80; i++) {
+            float sx = (float)((i * 137 + 23) % WIN_W);
+            float sy = (float)(((int)(_select_scroll * 0.35f) + i * 89) % WIN_H);
+            SDL_FRect star = {sx, sy, 1.f, 1.f}; SDL_RenderFillRect(ren, &star);
+        }
+        SDL_SetRenderDrawColor(ren, 200, 200, 255, 255);
+        for (int i = 0; i < 30; i++) {
+            float sx = (float)((i * 317 + 71) % WIN_W);
+            float sy = (float)(((int)(_select_scroll * 0.9f) + i * 157) % WIN_H);
+            SDL_FRect star = {sx, sy, 2.f, 2.f}; SDL_RenderFillRect(ren, &star);
+        }
+
+        // Central card — 480 × 280, centred
+        const float cx = (WIN_W - 480.f) / 2.f;   // 272
+        const float cy = (WIN_H - 280.f) / 2.f;   // 244
+        // Border
+        SDL_SetRenderDrawColor(ren, 100, 130, 255, 255);
+        SDL_FRect border = {cx - 3.f, cy - 3.f, 486.f, 286.f};
+        SDL_RenderFillRect(ren, &border);
+        // Card body
+        SDL_SetRenderDrawColor(ren, 10, 14, 40, 255);
+        SDL_FRect card = {cx, cy, 480.f, 280.f};
+        SDL_RenderFillRect(ren, &card);
+        // Header strip
+        SDL_SetRenderDrawColor(ren, 25, 35, 90, 255);
+        SDL_FRect header = {cx, cy, 480.f, 60.f};
+        SDL_RenderFillRect(ren, &header);
+
+        // "PAUSED" title (scale 5 → canvas 204.8)
         SDL_SetRenderScale(ren, 5.f, 5.f);
-        SDL_SetRenderDrawColor(ren, 180, 200, 255, 255);
-        SDL_RenderDebugText(ren, 65.f, 46.f, "PAUSED");
+        SDL_SetRenderDrawColor(ren, 160, 190, 255, 255);
+        SDL_RenderDebugText(ren, (WIN_W/5.f - 6.f*8.f)/2.f, (cy + 15.f)/5.f, "PAUSED");
         SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Divider
+        SDL_SetRenderDrawColor(ren, 50, 70, 150, 255);
+        SDL_FRect div = {cx + 20.f, cy + 62.f, 440.f, 1.f};
+        SDL_RenderFillRect(ren, &div);
+
+        // Level / score info
         SDL_SetRenderScale(ren, 2.f, 2.f);
-        SDL_SetRenderDrawColor(ren, 140, 140, 140, 255);
-        SDL_RenderDebugText(ren, 168.f, 110.f, "P / ESC  to resume");
+        SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
+        char buf[32];
+        SDL_snprintf(buf, sizeof(buf), "Level %d", _current_level);
+        SDL_RenderDebugText(ren, (cx + 30.f)/2.f, (cy + 78.f)/2.f, buf);
+        SDL_snprintf(buf, sizeof(buf), "Score %05d", _score);
+        SDL_RenderDebugText(ren, (cx + 260.f)/2.f, (cy + 78.f)/2.f, buf);
         SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Divider
+        SDL_RenderFillRect(ren, &div); // reuse style
+        SDL_SetRenderDrawColor(ren, 50, 70, 150, 255);
+        SDL_FRect div2 = {cx + 20.f, cy + 108.f, 440.f, 1.f};
+        SDL_RenderFillRect(ren, &div2);
+
+        // Controls reminder
+        struct CtrlRow { const char* key; const char* action; };
+        const CtrlRow rows[] = {
+            {"ARROWS",     "Move"},
+            {"SPACE",      "Shoot"},
+            {"SHIFT+DIR",  "Dash"},
+            {"I",          "Iron Dome"},
+            {"Q",          "Bullet-Time"},
+        };
+        SDL_SetRenderScale(ren, 1.5f, 1.5f);
+        for (int i = 0; i < 5; i++) {
+            SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+            SDL_RenderDebugText(ren, (cx + 30.f)/1.5f, (cy + 120.f + i*22.f)/1.5f, rows[i].key);
+            SDL_SetRenderDrawColor(ren, 140, 140, 180, 255);
+            SDL_RenderDebugText(ren, (cx + 200.f)/1.5f, (cy + 120.f + i*22.f)/1.5f, rows[i].action);
+        }
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Resume hint (blinking)
+        if ((SDL_GetTicks() / 550) % 2 == 0) {
+            SDL_SetRenderScale(ren, 2.f, 2.f);
+            SDL_SetRenderDrawColor(ren, 80, 200, 255, 255);
+            SDL_RenderDebugText(ren, (cx + 100.f)/2.f, (cy + 248.f)/2.f, "P / ESC  to resume");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
     }
 
     void Game::endgame_draw() const
     {
-        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(ren, 0, 0, 0, 180);
-        SDL_FRect full = {0, 0, (float)WIN_W, (float)WIN_H};
-        SDL_RenderFillRect(ren, &full);
-        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
-
         static const Mask gsMask = MaskBuilder().set<GameStatus>().build();
         bool gameOver = false;
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(gsMask)) { gameOver = e.get<GameStatus>().gameOver; break; }
-
+        int  kills = 0, shots = 0, hits = 0;
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(gsMask)) continue;
+            const auto& gs2 = e.get<GameStatus>();
+            gameOver = gs2.gameOver;
+            kills = gs2.kills; shots = gs2.shots; hits = gs2.hits;
+            break;
+        }
         for (Entity e = Entity::first(); !e.eof(); e.next()) {
             if (!e.test(gsMask)) continue;
             auto& gs2 = e.get<GameStatus>();
@@ -1711,25 +2031,106 @@ namespace ci
             break;
         }
 
-        SDL_SetRenderScale(ren, 4.f, 4.f);
+        const bool newRecord = (_score > _high_score);
+        if (newRecord) { _high_score = _score; save_high_score(); }
+
+        // Starfield background (same as select screen)
+        SDL_SetRenderDrawColor(ren, 4, 4, 18, 255);
+        { SDL_FRect full = {0, 0, (float)WIN_W, (float)WIN_H}; SDL_RenderFillRect(ren, &full); }
+        SDL_SetRenderDrawColor(ren, 60, 60, 110, 255);
+        for (int i = 0; i < 80; i++) {
+            float sx = (float)((i * 137 + 23) % WIN_W);
+            float sy = (float)(((int)(_select_scroll * 0.35f) + i * 89) % WIN_H);
+            SDL_FRect star = {sx, sy, 1.f, 1.f}; SDL_RenderFillRect(ren, &star);
+        }
+        SDL_SetRenderDrawColor(ren, 200, 200, 255, 255);
+        for (int i = 0; i < 30; i++) {
+            float sx = (float)((i * 317 + 71) % WIN_W);
+            float sy = (float)(((int)(_select_scroll * 0.9f) + i * 157) % WIN_H);
+            SDL_FRect star = {sx, sy, 2.f, 2.f}; SDL_RenderFillRect(ren, &star);
+        }
+
+        // Central card — 620 × 340, centred
+        const float cx = (WIN_W - 620.f) / 2.f;   // 202
+        const float cy = (WIN_H - 340.f) / 2.f;   // 214
+        // Border
+        SDL_SetRenderDrawColor(ren, gameOver ? 200 : 50, gameOver ? 40 : 200, gameOver ? 40 : 50, 255);
+        SDL_FRect border = {cx - 3.f, cy - 3.f, 626.f, 346.f};
+        SDL_RenderFillRect(ren, &border);
+        // Card bg
+        SDL_SetRenderDrawColor(ren, gameOver ? 35 : 10, gameOver ? 8 : 35, gameOver ? 8 : 10, 255);
+        SDL_FRect card = {cx, cy, 620.f, 340.f};
+        SDL_RenderFillRect(ren, &card);
+        // Header strip
+        SDL_SetRenderDrawColor(ren, gameOver ? 90 : 20, gameOver ? 15 : 90, gameOver ? 15 : 20, 255);
+        SDL_FRect header = {cx, cy, 620.f, 68.f};
+        SDL_RenderFillRect(ren, &header);
+
+        // Big title (scale 5 → each char = 40px wide)
+        // "GAME OVER" = 9 chars, 360px.  canvas width at scale5 = 204.8.  x=(204.8-72)/2 = 66.4
+        // "YOU WIN!" = 8 chars, 320px.  x=(204.8-64)/2 = 70.4
+        SDL_SetRenderScale(ren, 5.f, 5.f);
         if (gameOver) {
-            SDL_SetRenderDrawColor(ren, 255, 80, 80, 255);
-            SDL_RenderDebugText(ren, 92.f, 342.f/4.f, "GAME OVER");
+            SDL_SetRenderDrawColor(ren, 255, 70, 70, 255);
+            SDL_RenderDebugText(ren, (WIN_W/5.f - 9.f*8.f)/2.f, (cy + 14.f)/5.f, "GAME OVER");
         } else {
-            SDL_SetRenderDrawColor(ren, 80, 255, 80, 255);
-            SDL_RenderDebugText(ren, 96.f, 342.f/4.f, "YOU WIN!");
+            SDL_SetRenderDrawColor(ren, 80, 255, 100, 255);
+            SDL_RenderDebugText(ren, (WIN_W/5.f - 8.f*8.f)/2.f, (cy + 14.f)/5.f, "YOU WIN!");
         }
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
-        if (_score > _high_score) { _high_score = _score; save_high_score(); }
-        SDL_SetRenderScale(ren, 2.f, 2.f);
-        SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
+        // Divider line inside card
+        SDL_SetRenderDrawColor(ren, gameOver ? 90:30, gameOver ? 20:90, gameOver ? 20:30, 255);
+        SDL_FRect div = {cx + 20.f, cy + 70.f, 580.f, 1.f};
+        SDL_RenderFillRect(ren, &div);
+
+        // Stats row — kills / accuracy / level reached (scale 2, canvas = 512×384)
+        const int acc = shots > 0 ? (hits * 100 / shots) : 0;
         char buf[64];
-        SDL_snprintf(buf, sizeof(buf), "SCORE %05d    BEST %05d", _score, _high_score);
-        SDL_RenderDebugText(ren, 156.f, 386.f/2.f, buf);
-        SDL_SetRenderDrawColor(ren, 160, 160, 160, 255);
-        SDL_RenderDebugText(ren, 184.f, 410.f/2.f, "Press R to restart");
+        SDL_SetRenderScale(ren, 2.f, 2.f);
+        SDL_SetRenderDrawColor(ren, 180, 220, 180, 255);
+        SDL_snprintf(buf, sizeof(buf), "Kills: %d", kills);
+        SDL_RenderDebugText(ren, (cx + 30.f)/2.f, (cy + 86.f)/2.f, buf);
+        if (shots > 0) SDL_snprintf(buf, sizeof(buf), "Accuracy: %d%%", acc);
+        else           SDL_snprintf(buf, sizeof(buf), "Accuracy: --");
+        SDL_RenderDebugText(ren, (cx + 210.f)/2.f, (cy + 86.f)/2.f, buf);
+        SDL_snprintf(buf, sizeof(buf), "Level: %d", _current_level);
+        SDL_RenderDebugText(ren, (cx + 430.f)/2.f, (cy + 86.f)/2.f, buf);
         SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Score & best — scale 2.5, canvas = 409.6×307.2
+        SDL_SetRenderScale(ren, 2.5f, 2.5f);
+        SDL_SetRenderDrawColor(ren, 255, 215, 30, 255);
+        SDL_snprintf(buf, sizeof(buf), "SCORE  %05d", _score);
+        SDL_RenderDebugText(ren, (WIN_W/2.5f - 11.f*8.f)/2.f, (cy + 132.f)/2.5f, buf);
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        SDL_SetRenderScale(ren, 2.f, 2.f);
+        SDL_SetRenderDrawColor(ren, 150, 150, 150, 255);
+        SDL_snprintf(buf, sizeof(buf), "Best: %05d", _high_score);
+        SDL_RenderDebugText(ren, (WIN_W/2.f - 10.f*8.f)/2.f, (cy + 170.f)/2.f, buf);
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // NEW RECORD flash
+        if (newRecord && (SDL_GetTicks() / 400) % 2 == 0) {
+            SDL_SetRenderScale(ren, 2.5f, 2.5f);
+            SDL_SetRenderDrawColor(ren, 255, 180, 0, 255);
+            SDL_RenderDebugText(ren, (WIN_W/2.5f - 10.f*8.f)/2.f, (cy + 210.f)/2.5f, "NEW RECORD!");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
+
+        // Divider
+        SDL_SetRenderDrawColor(ren, gameOver ? 90:30, gameOver ? 20:90, gameOver ? 20:30, 255);
+        SDL_FRect div2 = {cx + 20.f, cy + 268.f, 580.f, 1.f};
+        SDL_RenderFillRect(ren, &div2);
+
+        // Restart prompt (blinking)
+        if ((SDL_GetTicks() / 600) % 2 == 0) {
+            SDL_SetRenderScale(ren, 2.f, 2.f);
+            SDL_SetRenderDrawColor(ren, gameOver ? 200 : 100, gameOver ? 100 : 200, 100, 255);
+            SDL_RenderDebugText(ren, (WIN_W/2.f - 18.f*8.f)/2.f, (cy + 298.f)/2.f, "Press  R  to play again");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
     }
 
     // ─────────────────────────────── Main loop ───────────────────────────────────
@@ -1776,10 +2177,22 @@ namespace ci
                         if (e.test(gsMask)) { gameOver = e.get<GameStatus>().gameOver; won = e.get<GameStatus>().won; break; }
 
                     if (won && _current_level < 4) {
+                        // ── Save stats NOW, before spawn_enemy_wave() zeros them ──
+                        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+                            if (!e.test(gsMask)) continue;
+                            const auto& gs2 = e.get<GameStatus>();
+                            _prev_kills     = gs2.kills;
+                            _prev_shots     = gs2.shots;
+                            _prev_hits      = gs2.hits;
+                            Uint64 endT     = gs2.waveEndTime > 0 ? gs2.waveEndTime : SDL_GetTicks();
+                            _prev_wave_secs = (int)((endT - gs2.waveStartTime) / 1000);
+                            break;
+                        }
                         _current_level++;
                         clear_enemies_only();
                         spawn_enemy_wave();
-                        Entity::create().add(LevelSplash{150});
+                        // Level 4 gets a longer, phased dramatic splash (5 s)
+                        Entity::create().add(LevelSplash{_current_level == 4 ? 300 : 150});
                         play_sfx(4);
                         won = false;
                     }
