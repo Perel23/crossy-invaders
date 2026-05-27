@@ -41,7 +41,9 @@ namespace ci
           s = IMG_Load("res/hearts_spreadsheet.png");
           if (s) { hearts_texture      = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
           s = IMG_Load("res/iron_dome.png");
-          if (s) { iron_dome_texture   = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+          if (s) { iron_dome_texture      = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+          s = IMG_Load("res/iron_dome_icon.png");
+          if (s) { iron_dome_icon_texture = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
        }
 
        // SDL3 audio: open the default playback device as a stream.
@@ -63,7 +65,8 @@ namespace ci
        if (boss_texture)      SDL_DestroyTexture(boss_texture);
        if (shelter_texture)   SDL_DestroyTexture(shelter_texture);
        if (hearts_texture)    SDL_DestroyTexture(hearts_texture);
-       if (iron_dome_texture) SDL_DestroyTexture(iron_dome_texture);
+       if (iron_dome_texture)      SDL_DestroyTexture(iron_dome_texture);
+       if (iron_dome_icon_texture) SDL_DestroyTexture(iron_dome_icon_texture);
        if (trump_select_tex)  SDL_DestroyTexture(trump_select_tex);
        if (bibi_select_tex)   SDL_DestroyTexture(bibi_select_tex);
        for (int i = 0; i < 4; i++) {
@@ -978,19 +981,32 @@ namespace ci
              continue;
           }
 
-          // Pickups (small coloured squares).
+          // Pickups.
           if (e.test(pickupMask)) {
              const int type = e.get<Pickup>().type;
              const SDL_FPoint p = e.get<Transform>().p;
-             if (type == 0) SDL_SetRenderDrawColor(ren, 255, 220,  30, 255); // yellow=rapid
-             else if (type == 1) SDL_SetRenderDrawColor(ren,  80, 160, 255, 255); // blue=shield
-             else SDL_SetRenderDrawColor(ren,  50, 220, 100, 255);             // green=hp
-             SDL_FRect pr = {p.x - 14.f, p.y - 14.f, 28.f, 28.f};
-             SDL_RenderFillRect(ren, &pr);
-             // Small inner symbol (contrast box).
-             SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-             SDL_FRect inner = {p.x - 6.f, p.y - 6.f, 12.f, 12.f};
-             SDL_RenderFillRect(ren, &inner);
+             constexpr float PICK_SZ = 30.f;
+             const SDL_FRect pr = {p.x - PICK_SZ / 2.f, p.y - PICK_SZ / 2.f, PICK_SZ, PICK_SZ};
+
+             if (type == 2 && hearts_texture) {
+                // +HP: full red heart (row 0, col 0 of the spritesheet).
+                float tw = 0, th = 0;
+                SDL_GetTextureSize(hearts_texture, &tw, &th);
+                const SDL_FRect srcHeart = {0.f, 0.f, tw / 3.f, th / 3.f};
+                SDL_RenderTexture(ren, hearts_texture, &srcHeart, &pr);
+             } else if (type == 1 && iron_dome_icon_texture) {
+                // +Shield: iron dome icon (530×470 RGBA).
+                SDL_RenderTexture(ren, iron_dome_icon_texture, nullptr, &pr);
+             } else {
+                // type 0 (rapid-fire) or texture missing: coloured square fallback.
+                if      (type == 0) SDL_SetRenderDrawColor(ren, 255, 220,  30, 255);
+                else if (type == 1) SDL_SetRenderDrawColor(ren,  80, 160, 255, 255);
+                else                SDL_SetRenderDrawColor(ren,  50, 220, 100, 255);
+                SDL_RenderFillRect(ren, &pr);
+                SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+                SDL_FRect inner = {p.x - 6.f, p.y - 6.f, 12.f, 12.f};
+                SDL_RenderFillRect(ren, &inner);
+             }
              continue;
           }
 
@@ -1123,11 +1139,19 @@ namespace ci
                 SDL_RenderFillRect(ren, &icon);
              }
           }
+          // Iron Dome charge icons: full opacity = available, dimmed = used.
           for (int i = 0; i < 3; i++) {
-             SDL_FRect icon = {150.f + i * 26.f, 10.f, 20.f, 20.f};
-             const bool avail = i < sh.charges || (i == 0 && sh.timer > 0.f);
-             SDL_SetRenderDrawColor(ren, avail ? 80 : 55, avail ? 140 : 55, avail ? 255 : 55, 255);
-             SDL_RenderFillRect(ren, &icon);
+             const bool avail = (i < sh.charges) || (i == 0 && sh.timer > 0.f);
+             // icon is 530×470; render square-ish: preserve ratio → w=28, h=28*(470/530)≈25
+             const SDL_FRect icon = {150.f + i * 32.f, 4.f, 28.f, 25.f};
+             if (iron_dome_icon_texture) {
+                SDL_SetTextureAlphaMod(iron_dome_icon_texture, avail ? 255 : 60);
+                SDL_RenderTexture(ren, iron_dome_icon_texture, nullptr, &icon);
+                SDL_SetTextureAlphaMod(iron_dome_icon_texture, 255);
+             } else {
+                SDL_SetRenderDrawColor(ren, avail ? 80 : 55, avail ? 140 : 55, avail ? 255 : 55, 255);
+                SDL_RenderFillRect(ren, &icon);
+             }
           }
           // Rapid-fire indicator.
           if (rf) {
