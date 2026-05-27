@@ -1259,25 +1259,43 @@ namespace ci
           break;
        }
 
+       // SDL_RenderDebugText uses a fixed 8×8 px font.
+       // At scale S the virtual canvas is WIN_W/S × WIN_H/S.
+       // Centre formula: x = (canvas_w - char_count * 8) / 2
+       //                 y = real_pixel_y / S
+       //
+       // Layout (real pixels, centred block of ~84 px):
+       //   title  (scale 4, 32 px tall) starts at real_y = (WIN_H - 84) / 2 = 342
+       //   score  (scale 2, 16 px tall) starts at real_y = 342 + 32 + 12     = 386
+       //   restart(scale 2, 16 px tall) starts at real_y = 386 + 16 +  8     = 410
+
+       // --- Title ---
        SDL_SetRenderScale(ren, 4.f, 4.f);
+       // virtual canvas = 256 × 192
        if (gameOver) {
+          // "GAME OVER" = 9 chars → 72 px → x = (256-72)/2 = 92
           SDL_SetRenderDrawColor(ren, 255, 80, 80, 255);
-          SDL_RenderDebugText(ren, 64.f, 46.f, "GAME OVER");
+          SDL_RenderDebugText(ren, 92.f, 342.f / 4.f, "GAME OVER");
        } else {
+          // "YOU WIN!" = 8 chars → 64 px → x = (256-64)/2 = 96
           SDL_SetRenderDrawColor(ren, 80, 255, 80, 255);
-          SDL_RenderDebugText(ren, 68.f, 46.f, "YOU WIN!");
+          SDL_RenderDebugText(ren, 96.f, 342.f / 4.f, "YOU WIN!");
        }
        SDL_SetRenderScale(ren, 1.f, 1.f);
 
-       // Score + high score.
+       // --- Score + high score ---
        if (_score > _high_score) _high_score = _score;
        SDL_SetRenderScale(ren, 2.f, 2.f);
+       // virtual canvas = 512 × 384
+       // "SCORE 00000    BEST 00000" = 25 chars → 200 px → x = (512-200)/2 = 156
        SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
        char buf[64];
        SDL_snprintf(buf, sizeof(buf), "SCORE %05d    BEST %05d", _score, _high_score);
-       SDL_RenderDebugText(ren, 50.f, 62.f, buf);
+       SDL_RenderDebugText(ren, 156.f, 386.f / 2.f, buf);
+
+       // "Press R to restart" = 18 chars → 144 px → x = (512-144)/2 = 184
        SDL_SetRenderDrawColor(ren, 160, 160, 160, 255);
-       SDL_RenderDebugText(ren, 88.f, 78.f, "Press R to restart");
+       SDL_RenderDebugText(ren, 184.f, 410.f / 2.f, "Press R to restart");
        SDL_SetRenderScale(ren, 1.f, 1.f);
     }
 
