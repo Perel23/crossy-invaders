@@ -149,12 +149,23 @@ namespace ci
              for (int col = 0; col < ENEMY_COLS; col++) {
                 const int lane = ENEMY_TOP_LANE - row;
                 const int ecol = ENEMY_START_COL + col;
-                Entity::create().addAll(
-                   Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
-                   Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
-                   LanePos{lane, ecol},
-                   EnemyTag{},
-                   Health{_current_level}); // Higher HP on level 2
+                if (_current_level == 2) {
+                   // Level 2: each enemy moves independently — give it an IndividualMove timer
+                   Entity::create().addAll(
+                      Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
+                      Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
+                      LanePos{lane, ecol},
+                      EnemyTag{},
+                      Health{_current_level},
+                      IndividualMove{SDL_GetTicks() + (Uint64)(std::rand() % 500)});
+                } else {
+                   Entity::create().addAll(
+                      Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
+                      Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
+                      LanePos{lane, ecol},
+                      EnemyTag{},
+                      Health{_current_level});
+                }
              }
           }
        }
@@ -203,6 +214,10 @@ namespace ci
           ScreenShake{0},
           ComboState{0, 0, 1});
 
+       // Reset camera for the new level/run.
+       _camera_scroll = 0.f;
+       _camera_grace  = 180;
+
        // Count enemies spawned so the difficulty-ramp system has a baseline.
        _wave_enemy_count = 0;
        static const Mask eMask = MaskBuilder().set<EnemyTag>().build();
@@ -225,7 +240,9 @@ namespace ci
           if (e.test(ssMask)) { e.get<SelectState>().moved = false; break; }
        }
 
-       _score = 0;
+       _score         = 0;
+       _camera_scroll = 0.f;
+       _camera_grace  = 180;
        _state = GameState::Select;
     }
 
@@ -344,38 +361,70 @@ namespace ci
 
     void Game::draw_background() const
     {
-       // Lane color palette: safe zone / road / no-man's land / enemy zone
-       for (int lane = 0; lane < LANES; lane++) {
-          const float y = WIN_H - (lane + 1) * TILE;
+       // IMPORTANT: use raw _camera_scroll — NOT fmodf.
+       // Entity screen Y = worldY + _camera_scroll.
+       // Lane stripe screen Y = WIN_H - (lane+1)*TILE + _camera_scroll.
+       // Both use the same offset, so vehicles always sit inside their road stripe.
+       // fmodf would only apply a fractional-tile shift to the background while
+       // entities moved by the full amount — that's what caused the road mismatch.
+       //
+       // Draw LANES+35 rows so the viewport stays filled after many tiles of scrolling
+       // (35 extra tiles covers ~37 s of camera travel at the base scroll rate).
+       // Use modular lane index so the road/safe/field pattern repeats every LANES=12 lanes.
+       // This means road bands appear at lanes 4, 16, 28 … and 6, 18, 30 … indefinitely,
+       // matching where vehicles land after their vertical recycle (also every LANES*TILE).
+       for (int lane = -2; lane < LANES + 35; lane++) {
+          const float y = WIN_H - (lane + 1) * TILE + _camera_scroll;
+          if (y + TILE < 0.f || y > (float)WIN_H) continue;
           SDL_FRect rect = {0.f, y, (float)WIN_W, (float)TILE};
 
-          if (lane <= 1)
-             SDL_SetRenderDrawColor(ren, 20,  70, 20,  255);  // safe zone – dark green
-          else if (lane == 4 || lane == 6)
-             SDL_SetRenderDrawColor(ren, 40,  40, 50,  255);  // road lanes – asphalt
-          else if (lane == 5)
-             SDL_SetRenderDrawColor(ren, 28,  55, 28,  255);  // median strip
-          else if (lane >= LANES - 2)
-             SDL_SetRenderDrawColor(ren, 35,   8,  8,  255);  // enemy zone – dark red tint
-          else
-             SDL_SetRenderDrawColor(ren, 24,  55, 24,  255);  // general field
+          // tl: position within the repeating LANES-wide pattern (0 … LANES-1)
+          const int tl = ((lane % LANES) + LANES) % LANES;
+
+          if (_current_level == 1) {
+             if      (tl <= 1)             SDL_SetRenderDrawColor(ren,  20,  70,  20, 255); // safe – green
+             else if (tl == 4 || tl == 6)  SDL_SetRenderDrawColor(ren,  40,  40,  50, 255); // road – asphalt
+             else if (tl == 5)             SDL_SetRenderDrawColor(ren,  28,  55,  28, 255); // median
+             else if (tl >= LANES - 2)     SDL_SetRenderDrawColor(ren,  35,   8,   8, 255); // danger band
+             else                          SDL_SetRenderDrawColor(ren,  24,  55,  24, 255); // field
+          } else if (_current_level == 2) {
+             if      (tl <= 1)             SDL_SetRenderDrawColor(ren, 160, 120,  50, 255); // safe – sand
+             else if (tl == 4 || tl == 6)  SDL_SetRenderDrawColor(ren,  90,  75,  40, 255); // road – dirt
+             else if (tl == 5)             SDL_SetRenderDrawColor(ren, 130, 100,  45, 255); // median
+             else if (tl >= LANES - 2)     SDL_SetRenderDrawColor(ren,  80,  25,  10, 255); // danger band
+             else                          SDL_SetRenderDrawColor(ren, 145, 110,  48, 255); // desert
+          } else {
+             if      (tl <= 1)             SDL_SetRenderDrawColor(ren,  25,  20,  35, 255); // safe – violet
+             else if (tl == 4 || tl == 6)  SDL_SetRenderDrawColor(ren,  18,  15,  25, 255); // road – near-black
+             else if (tl == 5)             SDL_SetRenderDrawColor(ren,  30,  20,  40, 255); // median
+             else if (tl >= LANES - 2)     SDL_SetRenderDrawColor(ren,  50,   5,   5, 255); // danger band
+             else                          SDL_SetRenderDrawColor(ren,  22,  18,  30, 255); // dark field
+          }
           SDL_RenderFillRect(ren, &rect);
        }
 
-       // Dashed centre lines on road lanes
-       SDL_SetRenderDrawColor(ren, 180, 160, 30, 255);
-       for (int lane : {4, 6}) {
-          const float cy = WIN_H - lane * TILE - TILE / 2.f;
+       // Road dashes — drawn for every tiled occurrence of road lanes (tl == 4 or 6)
+       if      (_current_level == 1) SDL_SetRenderDrawColor(ren, 180, 160,  30, 255);
+       else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 120, 100,  30, 255);
+       else                          SDL_SetRenderDrawColor(ren,  60,  40,  80, 255);
+       for (int lane = -2; lane < LANES + 35; lane++) {
+          const int tl = ((lane % LANES) + LANES) % LANES;
+          if (tl != 4 && tl != 6) continue;
+          const float cy = WIN_H - lane * TILE - TILE / 2.f + _camera_scroll;
+          if (cy < -(float)TILE || cy > (float)WIN_H + TILE) continue;
           for (int x = 0; x < WIN_W; x += 40) {
              SDL_FRect dash = {(float)x, cy - 3.f, 24.f, 6.f};
              SDL_RenderFillRect(ren, &dash);
           }
        }
 
-       // Lane divider lines
-       SDL_SetRenderDrawColor(ren, 55, 55, 55, 255);
-       for (int lane = 0; lane <= LANES; lane++) {
-          const float y = WIN_H - lane * TILE;
+       // Lane divider lines — same modular range
+       if      (_current_level == 1) SDL_SetRenderDrawColor(ren,  55,  55,  55, 255);
+       else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 100,  80,  40, 255);
+       else                          SDL_SetRenderDrawColor(ren,  40,  30,  55, 255);
+       for (int lane = -1; lane <= LANES + 35; lane++) {
+          const float y = WIN_H - lane * TILE + _camera_scroll;
+          if (y < -1.f || y > (float)WIN_H + 1.f) continue;
           SDL_FRect line = {0.f, y, (float)WIN_W, 1.f};
           SDL_RenderFillRect(ren, &line);
        }
@@ -383,15 +432,12 @@ namespace ci
 
     void Game::splash_system() const
     {
+       // Just count down and destroy the banner entity.
+       // Gameplay continues uninterrupted — levels are now continuous.
        static const Mask mask = MaskBuilder().set<LevelSplash>().build();
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (!e.test(mask)) continue;
-          auto& ls = e.get<LevelSplash>();
-          if (--ls.framesLeft <= 0) {
-             e.destroy();
-             spawn_entities();
-             _state = GameState::Playing;
-          }
+          if (--e.get<LevelSplash>().framesLeft <= 0) e.destroy();
           return;
        }
     }
@@ -426,6 +472,102 @@ namespace ci
        if (enemy_texture)  { SDL_DestroyTexture(enemy_texture);  enemy_texture  = nullptr; }
        for (int i = 0; i < 4; i++) {
           if (haz_textures[i]) { SDL_DestroyTexture(haz_textures[i]); haz_textures[i] = nullptr; }
+       }
+    }
+
+    // Destroys only enemy-related entities — player, hazards, and shelters survive.
+    // Called when transitioning between levels in continuous-play mode.
+    void Game::clear_enemies_only() const
+    {
+       static const Mask enemyMask  = MaskBuilder().set<EnemyTag>().build();
+       static const Mask bulletMask = MaskBuilder().set<BulletTag>().build();
+       static const Mask explMask   = MaskBuilder().set<Explosion>().build();
+       static const Mask pickupMask = MaskBuilder().set<Pickup>().build();
+       for (Entity e = Entity::first(); !e.eof(); e.next()) {
+          if (e.test(enemyMask) || e.test(bulletMask) ||
+              e.test(explMask)  || e.test(pickupMask)) {
+             e.destroy();
+          }
+       }
+       if (enemy_texture) { SDL_DestroyTexture(enemy_texture); enemy_texture = nullptr; }
+    }
+
+    // Spawns the next wave of enemies above the current viewport.
+    // Called for level 2 and 3 transitions (scroll is already > 0).
+    // The base lane is calculated so enemies appear ~4 tiles above the screen top,
+    // giving the player breathing room while the camera scrolls them into view.
+    void Game::spawn_enemy_wave() const
+    {
+       if (!enemy_texture) {
+          SDL_Surface* s = IMG_Load("res/iranian_regime_pixel.png");
+          if (s) { enemy_texture = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+       }
+
+       // screen_top world Y = -_camera_scroll.
+       // 4 tiles above that: worldY = -_camera_scroll - 4*TILE.
+       // lane satisfying WIN_H - TILE/2 - lane*TILE = worldY:
+       //   lane = (WIN_H - TILE/2 + _camera_scroll + 4*TILE) / TILE
+       // We use ENEMY_TOP_LANE as base and add the scroll contribution.
+       const int enemy_base_lane = ENEMY_TOP_LANE
+                                  + static_cast<int>(_camera_scroll / TILE)
+                                  + 4;
+
+       if (_current_level == 3) {
+          const int lane = enemy_base_lane;
+          Entity::create().addAll(
+             Transform{{TILE / 2.f + (COLS / 2) * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
+             Drawable{{0, 0, 0, 0}, {TILE * 3.f, TILE * 3.f}},
+             LanePos{lane, COLS / 2},
+             EnemyTag{},
+             BossTag{},
+             Health{BOSS_HP});
+       } else {
+          // Level 2: individual random movement
+          const int rows = ENEMY_ROWS + (_current_level - 1);
+          for (int row = 0; row < rows; row++) {
+             for (int col = 0; col < ENEMY_COLS; col++) {
+                const int lane = enemy_base_lane - row;
+                const int ecol = ENEMY_START_COL + col;
+                Entity::create().addAll(
+                   Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
+                   Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
+                   LanePos{lane, ecol},
+                   EnemyTag{},
+                   Health{_current_level},
+                   IndividualMove{SDL_GetTicks() + (Uint64)(std::rand() % 500)});
+             }
+          }
+       }
+
+       // Refresh enemy count for difficulty ramp.
+       _wave_enemy_count = 0;
+       {
+          static const Mask eMask = MaskBuilder().set<EnemyTag>().build();
+          for (Entity e = Entity::first(); !e.eof(); e.next())
+             if (e.test(eMask)) _wave_enemy_count++;
+       }
+
+       // Reset formation direction and timers for a fresh level feel.
+       {
+          static const Mask fsMask = MaskBuilder().set<FormationState>().build();
+          for (Entity e = Entity::first(); !e.eof(); e.next()) {
+             if (!e.test(fsMask)) continue;
+             auto& fs       = e.get<FormationState>();
+             fs.dir         = 1;
+             fs.moveTimer   = SDL_GetTicks();
+             fs.shootTimer  = SDL_GetTicks();
+             break;
+          }
+       }
+
+       // Clear the won flag so the game doesn't immediately re-detect a win.
+       {
+          static const Mask gsMask = MaskBuilder().set<GameStatus>().build();
+          for (Entity e = Entity::first(); !e.eof(); e.next()) {
+             if (!e.test(gsMask)) continue;
+             e.get<GameStatus>().won = false;
+             break;
+          }
        }
     }
 
@@ -504,7 +646,9 @@ namespace ci
        // Instructions
        SDL_RenderDebugText(ren, 10.f, 280.f, "GOAL: Defeat all enemies and reach the top!");
        SDL_RenderDebugText(ren, 10.f, 310.f, "ARROWS:Move # SPACE:Shoot # I:Iron Dome # P/ESC:Pause/Quit");
-       SDL_RenderDebugText(ren, 10.f, 340.f, "hit SPACE to play");       SDL_SetRenderScale(ren, 1.f, 1.f);
+       SDL_RenderDebugText(ren, 10.f, 325.f, "PICKUPS: Yellow=Rapid Fire  Blue=Iron Dome  Red=+Heart");
+       SDL_RenderDebugText(ren, 10.f, 345.f, "hit SPACE to play");
+       SDL_SetRenderScale(ren, 1.f, 1.f);
 
        // Controls reference.
        SDL_SetRenderScale(ren, 1.5f, 1.5f);
@@ -543,15 +687,19 @@ namespace ci
           .build();
        static const Mask enemyMask = MaskBuilder().set<EnemyTag>().build();
 
-       // Check if enemies exist to lock the top screen border
+       // Check if enemies exist
        bool anyEnemy = false;
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (e.test(enemyMask)) { anyEnemy = true; break; }
        }
 
-       // If enemies are alive, max lane is LANES - 1 (stays on screen).
-       // If enemies are dead, max lane is LANES (allows stepping off the top to win).
-       int max_lane = anyEnemy ? LANES - 1 : LANES;
+       // max_lane must grow with the camera so the player can always move up.
+       // The hardcoded LANES-1=11 cap was fine at scroll=0 but blocks movement
+       // once the camera has scrolled further up the world.
+       // Formula: the highest visible lane = (WIN_H - TILE/2 + scroll) / TILE.
+       // Leave a 1-lane gap below the screen top so the player stays in view.
+       const int scrollTopLane = static_cast<int>((WIN_H - TILE / 2.f + _camera_scroll) / TILE);
+       int max_lane = scrollTopLane - (anyEnemy ? 1 : 0);
 
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (!e.test(mask)) continue;
@@ -589,6 +737,29 @@ namespace ci
           .build();
        static const Mask fsMask = MaskBuilder().set<FormationState>().build();
 
+       // ── Level 2: each enemy moves independently left/right at random intervals ──
+       if (_current_level == 2) {
+          static const Mask indvMask = MaskBuilder()
+             .set<EnemyTag>().set<LanePos>().set<Transform>().set<IndividualMove>().build();
+          const Uint64 now = SDL_GetTicks();
+          for (Entity e = Entity::first(); !e.eof(); e.next()) {
+             if (!e.test(indvMask)) continue;
+             auto& im = e.get<IndividualMove>();
+             if (now < im.nextMove) continue;
+             auto& lp = e.get<LanePos>();
+             auto& t  = e.get<Transform>();
+             const int dir = (std::rand() % 2 == 0) ? 1 : -1;
+             lp.col += dir;
+             if (lp.col < 0)       lp.col = 0;
+             if (lp.col > COLS-1)  lp.col = COLS-1;
+             t.p.x = TILE / 2.f + lp.col * TILE;
+             // next move: 200–700 ms from now, randomised per-enemy
+             im.nextMove = now + 200 + (Uint64)(std::rand() % 500);
+          }
+          return;
+       }
+
+       // ── Levels 1 & 3: classic Space-Invaders formation movement ──
        Entity fsEnt = Entity::first();
        for (Entity e = Entity::first(); !e.eof(); e.next())
           if (e.test(fsMask)) { fsEnt = e; break; }
@@ -596,9 +767,8 @@ namespace ci
 
        const Uint64 now = SDL_GetTicks();
 
-       // Base speed scales per level.
+       // Base speed scales per level (level 3 fastest).
        Uint64 move_ms = ENEMY_MOVE_MS;
-       if (_current_level == 2) move_ms -= 200;
        if (_current_level == 3) move_ms -= 300;
 
        // Difficulty ramp within the wave: fewer enemies = faster (Space Invaders feel).
@@ -613,6 +783,7 @@ namespace ci
        if (now - fs.moveTimer < move_ms) return;
        fs.moveTimer = now;
 
+       // Check if any enemy is at a wall.
        bool hitEdge = false;
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (!e.test(mask)) continue;
@@ -624,18 +795,18 @@ namespace ci
           }
        }
 
+       // Flip direction on wall hit, then move all enemies sideways.
+       // (No lane drop — enemies stay at their lanes now.)
        if (hitEdge) fs.dir = -fs.dir;
 
        for (Entity e = Entity::first(); !e.eof(); e.next()) {
           if (!e.test(mask)) continue;
           auto& lp = e.get<LanePos>();
           auto& t  = e.get<Transform>();
-          if (hitEdge) {
-             lp.lane--;
-          } else {
-             lp.col += fs.dir;
-          }
-          t.p.x = TILE / 2.f + lp.col  * TILE;
+          lp.col += fs.dir;
+          if (lp.col < 0)       lp.col = 0;
+          if (lp.col > COLS-1)  lp.col = COLS-1;
+          t.p.x = TILE / 2.f + lp.col * TILE;
           t.p.y = WIN_H - TILE / 2.f - lp.lane * TILE;
        }
     }
@@ -734,7 +905,10 @@ namespace ci
           const auto& v = e.get<Velocity>();
           t.p.x += v.dx;
           t.p.y += v.dy;
-          if (t.p.y < 0 || t.p.y > WIN_H) {
+          // Use screen Y for cull — world Y alone is wrong for level-2/3 enemies
+          // whose spawn position is negative (above the normal lane grid).
+          const float screenY = t.p.y + _camera_scroll;
+          if (screenY < -(float)TILE || screenY > (float)WIN_H + TILE) {
              e.destroy();
           }
        }
@@ -750,9 +924,21 @@ namespace ci
           auto& t        = e.get<Transform>();
           const float dx = e.get<Velocity>().dx;
           const float hw = e.get<Drawable>().size.x / 2.f;
+
+          // Horizontal wrap (always)
           t.p.x += dx;
           if (t.p.x - hw >  WIN_W) t.p.x = -hw;
           if (t.p.x + hw <  0)     t.p.x =  WIN_W + hw;
+
+          // Vertical recycle: when the camera scrolls a vehicle off the bottom,
+          // jump it up by exactly LANES*TILE (one full background-pattern cycle).
+          // Because the background tiles with period LANES*TILE, the vehicle will
+          // land on the next road stripe above — same colour, same lane identity.
+          const float screenY = t.p.y + _camera_scroll;
+          if (screenY > (float)WIN_H + TILE) {
+             t.p.y   -= LANES * TILE;                       // one pattern cycle up
+             t.p.x    = (float)(std::rand() % WIN_W);       // fresh horizontal position
+          }
        }
     }
 
@@ -839,9 +1025,13 @@ namespace ci
           _score += 10 * _current_level * cs.multiplier;
 
           // Random pickup drop (~30% chance, not for boss).
+          // The pickup lands at a random lane height (1-7) instead of the enemy's position,
+          // so it drifts into the playfield rather than staying near the top.
           if (sz < TILE * 2.f && std::rand() % 10 < 3) {
-             const int type = std::rand() % 3;
-             Entity::create().addAll(Transform{pos, 0.f},
+             const int   type     = std::rand() % 3;
+             const int   dropLane = 1 + std::rand() % 7;            // lanes 1–7
+             const float dropY    = WIN_H - TILE / 2.f - dropLane * TILE;
+             Entity::create().addAll(Transform{{pos.x, dropY}, 0.f},
                                      Drawable{{0,0,0,0},{28.f, 28.f}},
                                      Pickup{type});
           }
@@ -907,10 +1097,9 @@ namespace ci
           }
        }
 
-       // Enemy reach × player / lane breach.
+       // Enemy body × player collision (contact kill).
        for (Entity en = Entity::first(); !en.eof(); en.next()) {
           if (!en.test(enemyMask)) continue;
-          if (en.get<LanePos>().lane < 0) { gs.gameOver = true; return; }
           for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
              if (!pl.test(playerMask)) continue;
              if (!overlaps(en.get<Transform>().p, en.get<Drawable>().size,
@@ -920,17 +1109,22 @@ namespace ci
           }
        }
 
-       // Win condition: enemies cleared AND player walked off top.
+       // Camera-scroll death: player scrolled off the bottom of the screen.
+       for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
+          if (!pl.test(playerMask)) continue;
+          if (pl.get<Transform>().p.y + _camera_scroll > WIN_H + TILE / 2.f) {
+             gs.gameOver = true;
+             return;
+          }
+          break;
+       }
+
+       // Win condition: all enemies cleared.
+       // (No walk-off-top required — continuous levels spawn the next wave above.)
        bool anyEnemy = false;
        for (Entity e = Entity::first(); !e.eof(); e.next())
           if (e.test(enemyMask)) { anyEnemy = true; break; }
-       if (!anyEnemy) {
-          for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
-             if (!pl.test(playerMask)) continue;
-             if (pl.get<Transform>().p.y < 0.f) gs.won = true;
-             break;
-          }
-       }
+       if (!anyEnemy) gs.won = true;
     }
 
     void Game::draw_system() const
@@ -975,7 +1169,7 @@ namespace ci
              Uint8 alpha     = (Uint8)(255 * (1.0f - progress));
              SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
              SDL_SetRenderDrawColor(ren, 255, (Uint8)(200 - (Uint8)(100 * progress)), 30, alpha);
-             SDL_FRect er = {p.x - size / 2, p.y - size / 2, size, size};
+             SDL_FRect er = {p.x - size / 2, p.y - size / 2 + _camera_scroll, size, size};
              SDL_RenderFillRect(ren, &er);
              SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
              continue;
@@ -986,7 +1180,7 @@ namespace ci
              const int type = e.get<Pickup>().type;
              const SDL_FPoint p = e.get<Transform>().p;
              constexpr float PICK_SZ = 30.f;
-             const SDL_FRect pr = {p.x - PICK_SZ / 2.f, p.y - PICK_SZ / 2.f, PICK_SZ, PICK_SZ};
+             const SDL_FRect pr = {p.x - PICK_SZ / 2.f, p.y - PICK_SZ / 2.f + _camera_scroll, PICK_SZ, PICK_SZ};
 
              if (type == 2 && hearts_texture) {
                 // +HP: full red heart (row 0, col 0 of the spritesheet).
@@ -1014,7 +1208,9 @@ namespace ci
 
           const auto& t = e.get<Transform>();
           const auto& d = e.get<Drawable>();
-          SDL_FRect dest = {t.p.x - d.size.x / 2, t.p.y - d.size.y / 2, d.size.x, d.size.y};
+          SDL_FRect dest = {t.p.x - d.size.x / 2,
+                            t.p.y - d.size.y / 2 + _camera_scroll,
+                            d.size.x, d.size.y};
 
           if (e.test(playerMask) && e.get<Shield>().timer > 0.f) {
              // Iron Dome image: 676×369 RGBA, rendered as a dome around the player.
@@ -1024,7 +1220,7 @@ namespace ci
              constexpr float DOME_H = DOME_W * (369.f / 676.f);
              const SDL_FRect domeRect = {
                 t.p.x - DOME_W / 2.f,
-                t.p.y - DOME_H / 2.f,
+                t.p.y - DOME_H / 2.f + _camera_scroll,
                 DOME_W, DOME_H
              };
              if (iron_dome_texture) {
@@ -1311,8 +1507,6 @@ namespace ci
 
           if (_state == GameState::Select) {
              select_input();
-          } else if (_state == GameState::LevelTransition) {
-             splash_system();
           } else if (_state == GameState::Playing) {
              for (Entity e = Entity::first(); !e.eof(); e.next())
                 if (e.test(gsMask)) { gameOver = e.get<GameStatus>().gameOver; won = e.get<GameStatus>().won; break; }
@@ -1329,15 +1523,24 @@ namespace ci
                 explosion_system();
                 pickup_system();
                 combo_system();
+                splash_system();  // tick level-banner countdown during play
+
+                // Camera auto-scroll: after 180-frame grace period, move ~1 tile per 3 s.
+                if (_camera_grace > 0) --_camera_grace;
+                else _camera_scroll += TILE / (3.f * FPS);
 
                 for (Entity e = Entity::first(); !e.eof(); e.next())
                    if (e.test(gsMask)) { gameOver = e.get<GameStatus>().gameOver; won = e.get<GameStatus>().won; break; }
 
                 if (won && _current_level < 3) {
+                   // ── Continuous level transition ──────────────────────────────
+                   // Keep the player, hazards and shelters alive.
+                   // Spawn the next wave above the current viewport so the camera
+                   // naturally scrolls the player toward the new enemies.
                    _current_level++;
-                   clear_game_entities();
-                   Entity::create().add(LevelSplash{150});
-                   _state = GameState::LevelTransition;
+                   clear_enemies_only();
+                   spawn_enemy_wave();          // resets gs.won internally
+                   Entity::create().add(LevelSplash{120});  // non-blocking banner
                    play_sfx(4);
                    won = false;
                 }
@@ -1351,13 +1554,17 @@ namespace ci
           SDL_RenderClear(ren);
           if (_state == GameState::Select) {
              select_draw();
-          } else if (_state == GameState::LevelTransition) {
-             draw_level_splash();
           } else if (_state == GameState::Paused) {
              draw_pause();
           } else {
              draw_system();
-             if (gameOver || won) endgame_draw();
+             // Overlay the level-banner if one is active (non-blocking, shown during play).
+             {
+                static const Mask splashMask = MaskBuilder().set<LevelSplash>().build();
+                for (Entity e = Entity::first(); !e.eof(); e.next())
+                   if (e.test(splashMask)) { draw_level_splash(); break; }
+             }
+             if (gameOver || (won && _current_level == 3)) endgame_draw();
           }
           SDL_RenderPresent(ren);
 

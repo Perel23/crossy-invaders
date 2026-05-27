@@ -34,8 +34,10 @@ namespace ci
 		static constexpr int	SHIELD_CHARGES   = 2;      // uses per life
 
 		void spawn_entities() const;
+		void spawn_enemy_wave() const;
 		void reset() const;
 		void clear_game_entities() const;
+		void clear_enemies_only() const;
 
 		void select_input() const;
 		void select_draw() const;
@@ -76,6 +78,9 @@ namespace ci
 		mutable SDL_Texture* trump_select_tex  = nullptr;
 		mutable SDL_Texture* bibi_select_tex   = nullptr;
 		mutable SDL_AudioStream* audio_stream  = nullptr;
+
+		mutable float        _camera_scroll  = 0.f;   // px added to every rendered Y (grows → entities scroll down)
+		mutable int          _camera_grace   = 180;   // frames before camera starts moving
 
 		mutable GameState _state = GameState::Select;
 	};

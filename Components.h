@@ -29,7 +29,8 @@ namespace ci
 	using Explosion    = struct { int frames; int maxFrames; float startSize; };
 	using Pickup       = struct { int type; };    // 0=rapid-fire  1=+shield  2=+health
 	using RapidFire    = struct { int frames; int cooldown; };
-	using ComboState   = struct { int count; int timer; int multiplier; };
+	using ComboState      = struct { int count; int timer; int multiplier; };
+	using IndividualMove  = struct { Uint64 nextMove; };
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;
@@ -87,4 +88,7 @@ template <> struct bagel::Storage<ci::RapidFire> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::ComboState> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::ComboState>;
+};
+template <> struct bagel::Storage<ci::IndividualMove> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::IndividualMove>;
 };
