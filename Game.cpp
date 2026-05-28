@@ -975,55 +975,47 @@ namespace ci
         SDL_FRect instrSep = {40.f, 500.f, (float)WIN_W - 80.f, 1.f};
         SDL_RenderFillRect(ren, &instrSep);
 
-        // Canvas width at scale 1.8 = 1024/1.8 = 568 px
-        // Column layout (all canvas-px):
-        //   C1-key = 10   C1-desc = 100  (longest key "SHIFT+DIR" = 72 px → gap 18)
-        //   C2-key = 215  C2-desc = 265  (longest key "SPACE"     = 40 px → gap 10)
-        //   C3-key = 400  C3-desc = 418  (longest key "I"/"P"     =  8 px → gap 10)
-        //   "Iron Dome" at 418, width 72 → ends 490 < 568 ✓
+        // Canvas width at scale 1.8 = 1024/1.8 ≈ 568 px
         SDL_SetRenderScale(ren, 1.8f, 1.8f);
 
+        // ── Header ──
         SDL_SetRenderDrawColor(ren, 200, 200, 240, 255);
         SDL_RenderDebugText(ren, 10.f, 510.f / 1.8f, "HOW TO PLAY:");
 
-        // ── Row 1: ARROWS/Move · SPACE/Shoot · I/Iron Dome ──
+        // ── Controls (single row): ARROWS · SPACE · I · P ──
+        // Key colour: bright blue  |  description colour: soft grey
         SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
         SDL_RenderDebugText(ren,  10.f, 540.f / 1.8f, "ARROWS");
-        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
-        SDL_RenderDebugText(ren, 100.f, 540.f / 1.8f, "Move");
+        SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
+        SDL_RenderDebugText(ren,  66.f, 540.f / 1.8f, "Move");
 
         SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
-        SDL_RenderDebugText(ren, 215.f, 540.f / 1.8f, "SPACE");
-        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
-        SDL_RenderDebugText(ren, 265.f, 540.f / 1.8f, "Shoot");
+        SDL_RenderDebugText(ren, 180.f, 540.f / 1.8f, "SPACE");
+        SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
+        SDL_RenderDebugText(ren, 228.f, 540.f / 1.8f, "Shoot");
 
         SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
-        SDL_RenderDebugText(ren, 400.f, 540.f / 1.8f, "I");
-        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
-        SDL_RenderDebugText(ren, 418.f, 540.f / 1.8f, "Iron Dome");
-
-        // ── Row 2: SHIFT+DIR/Dash · Q/Bullet-Time · P/Pause ──
-        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
-        SDL_RenderDebugText(ren,  10.f, 568.f / 1.8f, "SHIFT+DIR");
-        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
-        SDL_RenderDebugText(ren, 100.f, 568.f / 1.8f, "Dash");
+        SDL_RenderDebugText(ren, 350.f, 540.f / 1.8f, "I");
+        SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
+        SDL_RenderDebugText(ren, 366.f, 540.f / 1.8f, "Iron Dome");
 
         SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
-        SDL_RenderDebugText(ren, 215.f, 568.f / 1.8f, "Q");
-        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
-        SDL_RenderDebugText(ren, 228.f, 568.f / 1.8f, "Bullet-Time");  // ends 228+88=316 < 400 ✓
+        SDL_RenderDebugText(ren, 476.f, 540.f / 1.8f, "P");
+        SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
+        SDL_RenderDebugText(ren, 492.f, 540.f / 1.8f, "Pause");
 
-        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
-        SDL_RenderDebugText(ren, 400.f, 568.f / 1.8f, "P");
-        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
-        SDL_RenderDebugText(ren, 418.f, 568.f / 1.8f, "Pause");
+        // ── Pickups — each name is the colour of its in-game square/icon ──
+        SDL_SetRenderDrawColor(ren, 200, 200, 240, 255);
+        SDL_RenderDebugText(ren,  10.f, 575.f / 1.8f, "PICKUPS:");
 
-        // ── Row 3: Pickups ──
-        // "R=Rapid Fire  S=Shield  H=+Heart  W=Wave Shot" = 46 chars × 8 = 368 → ends 468 < 568 ✓
-        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
-        SDL_RenderDebugText(ren,  10.f, 598.f / 1.8f, "PICKUPS:");
-        SDL_SetRenderDrawColor(ren, 150, 150, 185, 255);
-        SDL_RenderDebugText(ren, 100.f, 598.f / 1.8f, "R=Rapid Fire   S=Shield   H=+Heart   W=Wave Shot");
+        SDL_SetRenderDrawColor(ren, 255, 220, 30, 255);   // yellow  → rapid fire
+        SDL_RenderDebugText(ren, 110.f, 575.f / 1.8f, "Rapid Fire");
+
+        SDL_SetRenderDrawColor(ren,  80, 180, 255, 255);  // sky-blue → Iron Dome charge
+        SDL_RenderDebugText(ren, 250.f, 575.f / 1.8f, "Iron Dome");
+
+        SDL_SetRenderDrawColor(ren, 255,  80,  80, 255);  // red      → +Heart
+        SDL_RenderDebugText(ren, 382.f, 575.f / 1.8f, "+Heart");
 
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
@@ -1032,13 +1024,13 @@ namespace ci
         SDL_FRect instrSep2 = {40.f, 622.f, (float)WIN_W - 80.f, 1.f};
         SDL_RenderFillRect(ren, &instrSep2);
 
-        // ── Blinking "PRESS SPACE TO PLAY"  (Y: 710) ──
+        // ── Blinking "PRESS SPACE TO PLAY"  (Y: 686) ──
         // Pushed down slightly to leave breathing room after the larger instructions block.
         if ((SDL_GetTicks() / 500) % 2 == 0) {
             // scale 2: "PRESS  SPACE  TO  PLAY" = 22×8×2=352px; centre x=(1024-352)/2=336; canvas=168
             SDL_SetRenderScale(ren, 2.f, 2.f);
             SDL_SetRenderDrawColor(ren, 255, 200, 50, 255);
-            SDL_RenderDebugText(ren, 168.f, 710.f / 2.f, "PRESS  SPACE  TO  PLAY");
+            SDL_RenderDebugText(ren, 168.f, 686.f / 2.f, "PRESS  SPACE  TO  PLAY");
             SDL_SetRenderScale(ren, 1.f, 1.f);
         }
     }
@@ -1699,7 +1691,7 @@ namespace ci
                 // Pickup label
                 SDL_SetRenderScale(ren, 1.5f, 1.5f);
                 SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-                const char* labels[] = {"R", "S", "H", "W"};
+                const char* labels[] = {"R", "", "", "W"};
                 SDL_RenderDebugText(ren, (pkScrX - 3.f) / 1.5f, (p.y + _camera_scroll + pickTiltOff - 4.f) / 1.5f, labels[type]);
                 SDL_SetRenderScale(ren, 1.f, 1.f);
                 continue;

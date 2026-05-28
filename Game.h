@@ -19,7 +19,7 @@ namespace ci
 		bool valid() const { return ren != nullptr; }
 
 		static constexpr int	WIN_W = 1024;
-		static constexpr int	WIN_H = 768;
+		static constexpr int	WIN_H = 704;
 		static constexpr int	TILE  = 64;
 		static constexpr int	COLS  = WIN_W / TILE;   // 16 columns
 		static constexpr int	LANES = WIN_H / TILE;   // 12 lanes
