@@ -68,6 +68,7 @@ namespace ci
 
 		SDL_Window*		        win            = nullptr;
 		SDL_Renderer*	        ren            = nullptr;
+		mutable SDL_Texture*	bg_texture       = nullptr;
 		mutable SDL_Texture*	player_texture   = nullptr;
 		mutable SDL_Texture*	enemy_texture    = nullptr;
 		mutable SDL_Texture*	boss_texture     = nullptr;
@@ -85,9 +86,10 @@ namespace ci
 		mutable SDL_Texture* bibi_select_tex   = nullptr;
 		mutable SDL_AudioStream* audio_stream  = nullptr;
 
-		mutable float        _camera_scroll  = 0.f;   // px added to every rendered Y (grows → entities scroll down)
-		mutable int          _camera_grace   = 180;   // frames before camera starts moving
-		mutable float        _select_scroll  = 0.f;   // animated select-screen background offset
+		mutable float        _camera_scroll       = 0.f;  // px added to every rendered Y (grows → entities scroll down)
+		mutable float        _level_start_scroll  = 0.f;  // value of _camera_scroll when this level began
+		mutable int          _camera_grace        = 180;  // frames before camera starts moving
+		mutable float        _select_scroll       = 0.f;  // animated select-screen background offset
 		mutable int          _difficulty     = 1;     // 0=Easy 1=Normal 2=Hard (cached at game start)
 		// Previous-wave stats saved before spawn_enemy_wave() resets them, used by draw_level_splash()
 		mutable int          _prev_kills     = 0;

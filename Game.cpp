@@ -15,9 +15,9 @@ namespace ci
     static constexpr int   BOSS_HP         = 40;
     static constexpr int   ENEMY_START_COL = (Game::COLS - ENEMY_COLS) / 2;
     static constexpr int   ENEMY_TOP_LANE  = Game::LANES - 2;
-    static constexpr float ISO_SCALE       = 0.70f;  // perspective squash factor
+    static constexpr float ISO_SCALE       = 1.0f;   // flat top-down: no perspective squash
     static constexpr float HOP_HEIGHT      = 18.f;   // max pixel rise during player hop
-    static constexpr float TILT            = 0.30f;  // diagonal shear: screenY += (wx - WIN_W/2)*TILT
+    static constexpr float TILT            = 0.0f;   // flat top-down: no diagonal shear
 
     // Difficulty speed multipliers: Easy = slower enemies, Hard = faster
     static float diff_move_mult (int d) { return d == 0 ? 1.5f : d == 2 ? 0.70f : 1.0f; }
@@ -42,6 +42,7 @@ namespace ci
                 SDL_DestroySurface(s);
                 return t;
             };
+            bg_texture            = loadTex("res/background.png");
             trump_select_tex      = loadTex("res/trump_pixel.png");
             bibi_select_tex       = loadTex("res/bibi_pixel.png");
             shelter_texture       = loadTex("res/miklat.png");
@@ -63,6 +64,7 @@ namespace ci
 
     Game::~Game()
     {
+        if (bg_texture)             SDL_DestroyTexture(bg_texture);
         if (player_texture)         SDL_DestroyTexture(player_texture);
         if (enemy_texture)          SDL_DestroyTexture(enemy_texture);
         if (boss_texture)           SDL_DestroyTexture(boss_texture);
@@ -200,19 +202,20 @@ namespace ci
                 Drawable{{0, 0, 0, 0}, {SHELTER_W, SHELTER_H}},
                 Shelter{}, Health{5});
 
-        // ── Hazards ──
+        // ── Hazards (Level 1 / USA) ──
+        // Pixel analysis of background.png confirmed:
+        //   Lane 5 → image rows 1422-1520 (main highway)
+        //   Lane 8 → image rows 1265-1299 (secondary road)
         const float base_speed = 2.5f + (_current_level - 1) * 0.6f;
         struct HazardDef { int lane; float dx; int tex; };
-        const HazardDef hdefs[] = { {4, base_speed, 0}, {6, -base_speed, 1} };
-        int h_idx = 0;
+        const HazardDef hdefs[] = { {5, base_speed, 0}, {8, -base_speed, 1} };
         for (const auto& def : hdefs) {
             const float y = WIN_H - TILE / 2.f - def.lane * TILE;
             for (int k = 0; k < 2; k++) {
                 Entity::create().addAll(
                     Transform{{(float)(std::rand() % WIN_W), y}, 0.f},
                     Drawable{{0, 0, 0, 0}, {HAZARD_W, HAZARD_H}},
-                    Velocity{def.dx, 0.f}, Hazard{}, HazardVisual{h_idx % 4});
-                h_idx++;
+                    Velocity{def.dx, 0.f}, Hazard{}, HazardVisual{def.tex});
             }
         }
 
@@ -226,8 +229,9 @@ namespace ci
             SlowMo{0, 0});
 
         // Camera
-        _camera_scroll = 0.f;
-        _camera_grace  = (_current_level == 4) ? 999999 : 180; // no auto-scroll in level 4
+        _camera_scroll      = 0.f;
+        _level_start_scroll = 0.f;
+        _camera_grace       = (_current_level == 4) ? 999999 : 180; // no auto-scroll in level 4
 
         // Enemy count baseline for difficulty ramp
         _wave_enemy_count = 0;
@@ -536,105 +540,57 @@ namespace ci
     // ──────────────────────────────── Background ─────────────────────────────────
     void Game::draw_background() const
     {
-        // tiltY: screen-Y offset applied to a point at screen-X sx
-        auto tiltY = [&](float sx) -> float { return (sx - WIN_W * 0.5f) * TILT; };
+        if (bg_texture) {
+            // ── Level-aligned, continuously-scrolling background ──────────────────
+            // Image layout (top → bottom): Level 3 / Level 2 / Level 1
+            //   secH ≈ imgH / 3 ≈ 607 rows per section.
+            //
+            // Level base rows (= srcY at level start, no camera scroll yet):
+            //   Level 1 → imgH - WIN_H  ≈ 1117   (bottom section / USA)
+            //   Level 2 → imgH - 2*secH ≈  607   (middle section / Iran)
+            //   Level 3/4 →            0          (top section / Israel)
+            //
+            // Within each level the window scrolls 1:1 with the camera (levelScroll),
+            // so every entity's world Y maps to a CONSTANT image row =
+            //   levelBase + _level_start_scroll + worldY
+            // — road lanes always fall on road pixels regardless of camera position.
+            // _level_start_scroll is captured at each level transition.
+            float imgW = 0.f, imgH = 0.f;
+            SDL_GetTextureSize(bg_texture, &imgW, &imgH);
+            const float secH = imgH / 3.f;  // 607
 
-        // camX: horizontal scroll coupled to vertical scroll so camera moves diagonally NE
-        const float camX = _camera_scroll * TILT;
-
-        // fillPara: draw a tilted, isometric-shifted lane band as a parallelogram
-        auto fillPara = [&](float world_y_top, float h, Uint8 r, Uint8 g, Uint8 b) {
-            // bXAdj: isometric X shift for this lane; camX scrolls it NE
-            const float bXAdj = -(world_y_top + h * 0.5f - WIN_H + TILE * 0.5f) * TILT - camX;
-            constexpr float EXTRA = 450.f;
-            const float x0 = bXAdj - EXTRA;
-            const float x1 = WIN_W + bXAdj + EXTRA;
-            const float yTL = world_y_top + _camera_scroll + tiltY(x0);
-            const float yTR = world_y_top + _camera_scroll + tiltY(x1);
-            if (std::max(yTL, yTR) + h < 0.f || std::min(yTL, yTR) > (float)WIN_H) return;
-            const SDL_FColor fc = {r / 255.f, g / 255.f, b / 255.f, 1.f};
-            const SDL_Vertex v[4] = {
-                {{x0, yTL},     fc, {0,0}},
-                {{x1, yTR},     fc, {0,0}},
-                {{x1, yTR + h}, fc, {0,0}},
-                {{x0, yTL + h}, fc, {0,0}},
+            const float levelBases[3] = {
+                imgH - WIN_H,        // Level 1: 1117
+                imgH - 2.f * secH,   // Level 2:  607
+                0.f                  // Level 3/4:  0
             };
-            const int idx[6] = {0,1,2, 0,2,3};
-            SDL_RenderGeometry(ren, nullptr, v, 4, idx, 6);
-        };
+            const int   levelIdx  = std::min(_current_level - 1, 2);
+            const float levelBase = levelBases[levelIdx];
 
-        for (int lane = -2; lane < LANES + 35; lane++) {
-            const float world_y_top = WIN_H - (lane + 1) * TILE;
-            const int tl = ((lane % LANES) + LANES) % LANES;
-            Uint8 r, g, b;
-            if (_current_level == 1) {
-                if      (tl <= 1)            { r= 20; g= 70; b= 20; }
-                else if (tl == 4 || tl == 6) { r= 40; g= 40; b= 50; }
-                else if (tl == 5)            { r= 28; g= 55; b= 28; }
-                else if (tl >= LANES - 2)    { r= 35; g=  8; b=  8; }
-                else                         { r= 24; g= 55; b= 24; }
-            } else if (_current_level == 2) {
-                if      (tl <= 1)            { r=160; g=120; b= 50; }
-                else if (tl == 4 || tl == 6) { r= 90; g= 75; b= 40; }
-                else if (tl == 5)            { r=130; g=100; b= 45; }
-                else if (tl >= LANES - 2)    { r= 80; g= 25; b= 10; }
-                else                         { r=145; g=110; b= 48; }
-            } else if (_current_level == 3) {
-                if      (tl <= 1)            { r= 25; g= 20; b= 35; }
-                else if (tl == 4 || tl == 6) { r= 18; g= 15; b= 25; }
-                else if (tl == 5)            { r= 30; g= 20; b= 40; }
-                else if (tl >= LANES - 2)    { r= 50; g=  5; b=  5; }
-                else                         { r= 22; g= 18; b= 30; }
-            } else {
-                if      (tl <= 1)            { r=  8; g= 15; b= 35; }
-                else if (tl == 4 || tl == 6) { r= 12; g= 10; b= 20; }
-                else if (tl == 5)            { r= 15; g= 12; b= 28; }
-                else if (tl >= LANES - 2)    { r= 35; g=  5; b= 50; }
-                else                         { r=  6; g= 10; b= 25; }
-            }
-            fillPara(world_y_top, (float)TILE, r, g, b);
+            const float levelScroll = _camera_scroll - _level_start_scroll;
+            float srcY = levelBase - levelScroll;
+            srcY = std::max(0.f, std::min(srcY, imgH - WIN_H));  // clamp to image
+
+            SDL_FRect src = {0.f, srcY,         imgW,          (float)WIN_H};
+            SDL_FRect dst = {0.f, 0.f,  (float)WIN_W,  (float)WIN_H};
+            SDL_RenderTexture(ren, bg_texture, &src, &dst);
+        } else {
+            SDL_SetRenderDrawColor(ren, 10, 20, 10, 255);
+            SDL_FRect full = {0.f, 0.f, (float)WIN_W, (float)WIN_H};
+            SDL_RenderFillRect(ren, &full);
         }
 
-        // Road dashes (placed at tilted centre-line of each road lane)
-        if      (_current_level == 1) SDL_SetRenderDrawColor(ren, 180, 160,  30, 255);
-        else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 120, 100,  30, 255);
-        else if (_current_level == 3) SDL_SetRenderDrawColor(ren,  60,  40,  80, 255);
-        else                          SDL_SetRenderDrawColor(ren,  40,  60, 120, 255);
-        for (int lane = -2; lane < LANES + 35; lane++) {
-            const int tl = ((lane % LANES) + LANES) % LANES;
-            if (tl != 4 && tl != 6) continue;
-            const float worldCY = WIN_H - lane * TILE - TILE / 2.f;
-            const float dXAdj   = -(worldCY - WIN_H + TILE * 0.5f) * TILT - camX;
-            for (float cx = dXAdj - 450.f; cx < WIN_W + dXAdj + 450.f; cx += 40.f) {
-                const float dashY = worldCY + _camera_scroll + tiltY(cx) - 3.f;
-                SDL_FRect dash = {cx, dashY, 24.f, 6.f};
-                SDL_RenderFillRect(ren, &dash);
-            }
-        }
-
-        // Lane dividers (diagonal lines)
-        if      (_current_level == 1) SDL_SetRenderDrawColor(ren,  55,  55,  55, 255);
-        else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 100,  80,  40, 255);
-        else if (_current_level == 3) SDL_SetRenderDrawColor(ren,  40,  30,  55, 255);
-        else                          SDL_SetRenderDrawColor(ren,  20,  30,  60, 255);
-        for (int lane = -1; lane <= LANES + 35; lane++) {
-            const float worldY = WIN_H - lane * TILE;
-            const float dXAdj  = ((float)lane * TILE - TILE * 0.5f) * TILT - camX;
-            const float x0 = dXAdj - 450.f;
-            const float x1 = WIN_W + dXAdj + 450.f;
-            const float yL = worldY + _camera_scroll + tiltY(x0);
-            const float yR = worldY + _camera_scroll + tiltY(x1);
-            if (yL < -(float)TILE && yR < -(float)TILE) continue;
-            if (yL > (float)WIN_H + TILE && yR > (float)WIN_H + TILE) continue;
-            SDL_RenderLine(ren, x0, yL, x1, yR);
-        }
-
-        // Level 4: scatter stars in screen space (no tilt needed)
+        // Level 4 role-reversal: dark overlay + star field to signal the twist
         if (_current_level == 4) {
+            SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(ren, 0, 0, 10, 170);
+            SDL_FRect full = {0.f, 0.f, (float)WIN_W, (float)WIN_H};
+            SDL_RenderFillRect(ren, &full);
+            SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
             SDL_SetRenderDrawColor(ren, 150, 180, 255, 255);
             for (int i = 0; i < 60; i++) {
                 float sx = (float)((i * 137 + 23) % WIN_W);
-                float sy = (float)((i * 89 + 47)  % WIN_H);
+                float sy = (float)((i *  89 + 47) % WIN_H);
                 SDL_FRect star = {sx, sy, 2.f, 2.f};
                 SDL_RenderFillRect(ren, &star);
             }
@@ -1493,8 +1449,8 @@ namespace ci
                     FloatingText{50, 50, 10 * _current_level, cs.multiplier});
             }
 
-            // Pickup drop (~30% chance, not for boss)
-            if (sz < TILE * 2.f && std::rand() % 10 < 3) {
+            // Pickup drop (~50% chance, not for boss)
+            if (sz < TILE * 2.f && std::rand() % 2 == 0) {
                 const int type     = std::rand() % 4;   // 0-3 (includes spread shot)
                 const int dropLane = 1 + std::rand() % 7;
                 const float dropY  = WIN_H - TILE / 2.f - dropLane * TILE;
@@ -2325,7 +2281,7 @@ namespace ci
                     // Camera scroll (disabled for level 4)
                     if (_current_level != 4) {
                         if (_camera_grace > 0) --_camera_grace;
-                        else _camera_scroll += TILE / (3.f * FPS);
+                        else _camera_scroll += TILE / (5.f * FPS);
                     }
 
                     for (Entity e = Entity::first(); !e.eof(); e.next())
@@ -2362,6 +2318,35 @@ namespace ci
                         _current_level++;
                         clear_enemies_only();
                         spawn_enemy_wave();
+                        // Capture scroll baseline so background starts at this level's section.
+                        _level_start_scroll = _camera_scroll;
+
+                        // ── Respawn hazards on the new level's actual road lanes ─────────
+                        // Pixel analysis confirmed (imageRow = levelBase + worldY, constant):
+                        //   Level 2 (Iran)  : lanes 6 & 7 → image rows 807-906
+                        //   Level 3 (Israel): lanes 6 & 7 → image rows 190-326
+                        //   Level 4         : same lanes (Level 3 background reused)
+                        {
+                            static const Mask hazMask = MaskBuilder().set<Hazard>().build();
+                            for (Entity e = Entity::first(); !e.eof(); e.next())
+                                if (e.test(hazMask)) e.destroy();
+
+                            const float spd = 2.5f + (_current_level - 1) * 0.6f;
+                            // tex2=Iranian tank (idx 3), tex2=Merkava (idx 2)
+                            const int t0 = (_current_level == 2) ? 3 : 2;
+                            const int t1 = (_current_level == 2) ? 3 : 1;
+                            struct HazInfo { int lane; float dx; int tex; };
+                            const HazInfo hz[] = { {7,  spd, t0}, {6, -spd, t1} };
+                            for (const auto& h : hz) {
+                                const float hy = WIN_H - TILE / 2.f - h.lane * TILE;
+                                for (int k = 0; k < 2; k++)
+                                    Entity::create().addAll(
+                                        Transform{{(float)(std::rand() % WIN_W), hy}, 0.f},
+                                        Drawable{{0,0,0,0},{HAZARD_W, HAZARD_H}},
+                                        Velocity{h.dx, 0.f}, Hazard{}, HazardVisual{h.tex});
+                            }
+                        }
+
                         // Level 4 gets a longer, phased dramatic splash (5 s)
                         const int splashFrames = (_current_level == 4 ? 300 : 150);
                         Entity::create().add(LevelSplash{splashFrames});
