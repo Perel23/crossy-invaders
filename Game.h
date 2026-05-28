@@ -78,6 +78,7 @@ namespace ci
 		mutable int _current_level    = 1;
 		mutable int _score            = 0;
 		mutable int _high_score       = 0;
+		mutable int _total_kills      = 0;   // accumulated across all levels
 		mutable int _wave_enemy_count = 0;
 		mutable SDL_Texture* haz_textures[4]   = {nullptr, nullptr, nullptr, nullptr};
 		mutable SDL_Texture* trump_select_tex  = nullptr;

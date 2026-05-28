@@ -249,7 +249,7 @@ namespace ci
         for (Entity e = Entity::first(); !e.eof(); e.next())
             if (e.test(ssMask)) { e.get<SelectState>().moved = false; break; }
 
-        _score = 0; _camera_scroll = 0.f; _camera_grace = 180;
+        _score = 0; _total_kills = 0; _camera_scroll = 0.f; _camera_grace = 180;
         _state = GameState::Select;
     }
 
@@ -363,6 +363,25 @@ namespace ci
                 gs.waveStartTime = SDL_GetTicks(); gs.waveEndTime = 0;
                 break;
             }
+        }
+
+        // Respawn shelters for levels 2 and 3 at the camera-adjusted position
+        // (level 1 shelters are spawned in spawn_entities; level 4 has no shelters).
+        if (_current_level == 2 || _current_level == 3) {
+            static const Mask shMask = MaskBuilder().set<Shelter>().build();
+            for (Entity e = Entity::first(); !e.eof(); e.next())
+                if (e.test(shMask)) e.destroy();
+
+            static constexpr float SHELTER_W  = TILE * 2.f - 4.f;
+            static constexpr float SHELTER_H  = TILE - 4.f;
+            static constexpr float SHELTER_XS[] = { 190.f, 512.f, 834.f };
+            // Keep shelters at lane 3 relative to the current screen bottom.
+            const float shelter_y = WIN_H - TILE / 2.f - 3 * TILE - _camera_scroll;
+            for (float sx : SHELTER_XS)
+                Entity::create().addAll(
+                    Transform{{sx, shelter_y}, 0.f},
+                    Drawable{{0, 0, 0, 0}, {SHELTER_W, SHELTER_H}},
+                    Shelter{}, Health{5});
         }
     }
 
@@ -982,7 +1001,7 @@ namespace ci
         SDL_SetRenderDrawColor(ren, 200, 200, 240, 255);
         SDL_RenderDebugText(ren, 10.f, 510.f / 1.8f, "HOW TO PLAY:");
 
-        // ── Controls (single row): ARROWS · SPACE · I · P ──
+        // ── Controls row 1: ARROWS · SPACE · I ──
         // Key colour: bright blue  |  description colour: soft grey
         SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
         SDL_RenderDebugText(ren,  10.f, 540.f / 1.8f, "ARROWS");
@@ -999,10 +1018,21 @@ namespace ci
         SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
         SDL_RenderDebugText(ren, 366.f, 540.f / 1.8f, "Iron Dome");
 
+        // ── Controls row 2: SHIFT · P · Q  (aligned to same x-columns as row 1) ──
         SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
-        SDL_RenderDebugText(ren, 476.f, 540.f / 1.8f, "P");
+        SDL_RenderDebugText(ren,  10.f, 558.f / 1.8f, "SHIFT");
         SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
-        SDL_RenderDebugText(ren, 492.f, 540.f / 1.8f, "Pause");
+        SDL_RenderDebugText(ren,  58.f, 558.f / 1.8f, "Dash");
+
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren, 180.f, 558.f / 1.8f, "P");
+        SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
+        SDL_RenderDebugText(ren, 196.f, 558.f / 1.8f, "Pause");
+
+        SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+        SDL_RenderDebugText(ren, 350.f, 558.f / 1.8f, "Q");
+        SDL_SetRenderDrawColor(ren, 180, 180, 205, 255);
+        SDL_RenderDebugText(ren, 366.f, 558.f / 1.8f, "Slow Mo");
 
         // ── Pickups — each name is the colour of its in-game square/icon ──
         SDL_SetRenderDrawColor(ren, 200, 200, 240, 255);
@@ -1119,7 +1149,7 @@ namespace ci
 
     void Game::enemy_move_system() const
     {
-        static const Mask mask    = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Transform>().build();
+        static const Mask mask    = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Transform>().set<Drawable>().build();
         static const Mask fsMask  = MaskBuilder().set<FormationState>().build();
         static const Mask smMask  = MaskBuilder().set<SlowMo>().build();
 
@@ -1173,12 +1203,16 @@ namespace ci
         if (now - fs.moveTimer < move_ms) return;
         fs.moveTimer = now;
 
-        // Check wall hit
+        // Check wall hit — uses both col-index guard (regular enemies) and
+        // a visual-size guard (large boss whose half-width exceeds TILE/2).
         bool hitEdge = false;
         for (Entity e = Entity::first(); !e.eof(); e.next()) {
             if (!e.test(mask)) continue;
-            const int col = e.get<LanePos>().col;
-            if ((fs.dir == 1 && col >= COLS - 1) || (fs.dir == -1 && col <= 0)) {
+            const int   col = e.get<LanePos>().col;
+            const float hw  = e.get<Drawable>().size.x / 2.f;
+            const float cx  = TILE / 2.f + col * TILE;
+            if ((fs.dir ==  1 && (col >= COLS - 1 || cx + hw >= (float)WIN_W)) ||
+                (fs.dir == -1 && (col <= 0        || cx - hw <= 0.f))) {
                 hitEdge = true; break;
             }
         }
@@ -1203,6 +1237,10 @@ namespace ci
             lp.col  = clamp(lp.col, 0, COLS - 1);
             t.p.x   = TILE / 2.f + lp.col * TILE;
             t.p.y   = WIN_H - TILE / 2.f - lp.lane * TILE;
+            // Hard-clamp screen X so oversized entities (boss) never stray off screen.
+            const float hw = e.get<Drawable>().size.x / 2.f;
+            if (t.p.x - hw < 0.f)          t.p.x = hw;
+            if (t.p.x + hw > (float)WIN_W) t.p.x = (float)WIN_W - hw;
         }
     }
 
@@ -2143,9 +2181,8 @@ namespace ci
             gameOver = e.get<GameStatus>().gameOver;
             break;
         }
-        // Stats were snapshotted into _prev_* right when the terminal condition fired,
-        // before any reset. Using them here ensures we never show zeros.
-        const int kills = _prev_kills;
+        // _total_kills accumulates every level; _prev_shots/_prev_hits are from the last level.
+        const int kills = _total_kills;
         const int shots = _prev_shots;
         const int hits  = _prev_hits;
         const bool newRecord = (_score > _high_score);
@@ -2303,6 +2340,7 @@ namespace ci
                             _prev_kills     = gs2.kills;
                             _prev_shots     = gs2.shots;
                             _prev_hits      = gs2.hits;
+                            _total_kills   += gs2.kills;   // add the final level's kills
                             _prev_wave_secs = (int)((SDL_GetTicks() - gs2.waveStartTime) / 1000);
                             break;
                         }
@@ -2316,6 +2354,7 @@ namespace ci
                             _prev_kills     = gs2.kills;
                             _prev_shots     = gs2.shots;
                             _prev_hits      = gs2.hits;
+                            _total_kills   += gs2.kills;   // accumulate across levels
                             Uint64 endT     = gs2.waveEndTime > 0 ? gs2.waveEndTime : SDL_GetTicks();
                             _prev_wave_secs = (int)((endT - gs2.waveStartTime) / 1000);
                             break;
