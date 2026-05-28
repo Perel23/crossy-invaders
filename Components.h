@@ -36,7 +36,7 @@ namespace ci
 	using FloatingText = struct { int frames; int maxFrames; int value; int mult; };
 	using SlowMo       = struct { int frames; int cooldown; };
 	using SoundEvent   = struct { int type; };
-	using HopState     = struct { int frames; int maxFrames; };
+	using HopState     = struct { int frames; int maxFrames; float hopDX; };
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;

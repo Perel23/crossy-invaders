@@ -146,7 +146,7 @@ namespace ci
             RapidFire{0, 0},
             DashState{0},
             SpreadShot{0},
-            HopState{0, 10});
+            HopState{0, 10, 0.f});
 
         // ── Enemies ──
         if (_current_level == 3) {
@@ -1094,10 +1094,11 @@ namespace ci
                         e.get<Invincibility>().frames = std::max(e.get<Invincibility>().frames, 12);
                 }
 
-                // Hop animation
+                // Hop animation — direction drives diagonal arc
                 if (e.has<HopState>()) {
                     auto& hop = e.get<HopState>();
                     hop.frames = hop.maxFrames;
+                    hop.hopDX  = s.up ? 1.f : s.down ? -1.f : 0.f;
                 }
 
                 // Footstep dust particle at old position
@@ -1687,21 +1688,23 @@ namespace ci
 
             const auto& t = e.get<Transform>();
             const auto& d = e.get<Drawable>();
-            // Hop visual offset (player only; zero for all other entities)
-            float hopOffY = 0.f;
+            // Hop visual offset — Y arc + diagonal X drift when moving forward/back
+            float hopOffY = 0.f, hopOffX = 0.f;
             if (e.has<HopState>() && e.get<HopState>().frames > 0) {
                 const auto& hop = e.get<HopState>();
-                hopOffY = std::sin(M_PI * (float)hop.frames / hop.maxFrames) * HOP_HEIGHT;
+                const float sinT = std::sin(M_PI * (float)hop.frames / hop.maxFrames);
+                hopOffY = sinT * HOP_HEIGHT;
+                hopOffX = sinT * HOP_HEIGHT * TILT * hop.hopDX;
             }
             const float tiltOff = (t.p.x - WIN_W * 0.5f) * TILT;
             const float sqH = d.size.y * ISO_SCALE;
-            SDL_FRect dest = {t.p.x - d.size.x/2, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY, d.size.x, sqH};
+            SDL_FRect dest = {t.p.x - d.size.x/2 - hopOffX, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY, d.size.x, sqH};
 
             // Iron Dome shield halo
             if (e.test(playerMask) && e.get<Shield>().timer > 0.f) {
                 constexpr float DOME_W = Game::TILE * 2.1f;
                 constexpr float DOME_H = DOME_W * (369.f / 676.f) * ISO_SCALE;
-                const SDL_FRect domeRect = {t.p.x - DOME_W/2.f, t.p.y - DOME_H/2.f + _camera_scroll + tiltOff - hopOffY, DOME_W, DOME_H};
+                const SDL_FRect domeRect = {t.p.x - DOME_W/2.f - hopOffX, t.p.y - DOME_H/2.f + _camera_scroll + tiltOff - hopOffY, DOME_W, DOME_H};
                 if (iron_dome_texture) {
                     const float phase = e.get<Shield>().timer / SHIELD_DURATION;
                     const Uint8 alpha = (Uint8)(180 + 60 * std::abs(std::sin(phase * 12.f)));
@@ -1886,14 +1889,16 @@ namespace ci
 
             // Power-up timer bars near player sprite
             const SDL_FPoint p = e.get<Transform>().p;
-            float hudHopOff = 0.f;
+            float hudHopOff = 0.f, hudHopOffX = 0.f;
             if (e.has<HopState>() && e.get<HopState>().frames > 0) {
                 const auto& hop = e.get<HopState>();
-                hudHopOff = std::sin(M_PI * (float)hop.frames / hop.maxFrames) * HOP_HEIGHT;
+                const float sinT = std::sin(M_PI * (float)hop.frames / hop.maxFrames);
+                hudHopOff  = sinT * HOP_HEIGHT;
+                hudHopOffX = sinT * HOP_HEIGHT * TILT * hop.hopDX;
             }
             const float screenY = p.y + _camera_scroll + (p.x - WIN_W * 0.5f) * TILT - hudHopOff;
             const float barW    = 48.f;
-            const float barX    = p.x - barW / 2.f;
+            const float barX    = p.x - barW / 2.f - hudHopOffX;
             float barY          = screenY + 30.f;
 
             const auto& rf = e.get<RapidFire>();
