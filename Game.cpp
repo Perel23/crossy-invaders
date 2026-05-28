@@ -1539,6 +1539,7 @@ namespace ci
         if (_current_level != 4) {
             for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
                 if (!pl.test(playerMask)) continue;
+                if (pl.get<Invincibility>().frames > 0) break;  // invulnerable during transition
                 const SDL_FPoint& pPos = pl.get<Transform>().p;
                 if (pPos.y + _camera_scroll + (pPos.x - WIN_W * 0.5f) * TILT > WIN_H + TILE / 2.f) {
                     gs.gameOver = true; return;
@@ -2137,14 +2138,16 @@ namespace ci
     {
         static const Mask gsMask = MaskBuilder().set<GameStatus>().build();
         bool gameOver = false;
-        int  kills = 0, shots = 0, hits = 0;
         for (Entity e = Entity::first(); !e.eof(); e.next()) {
             if (!e.test(gsMask)) continue;
-            const auto& gs2 = e.get<GameStatus>();
-            gameOver = gs2.gameOver;
-            kills = gs2.kills; shots = gs2.shots; hits = gs2.hits;
+            gameOver = e.get<GameStatus>().gameOver;
             break;
         }
+        // Stats were snapshotted into _prev_* right when the terminal condition fired,
+        // before any reset. Using them here ensures we never show zeros.
+        const int kills = _prev_kills;
+        const int shots = _prev_shots;
+        const int hits  = _prev_hits;
         const bool newRecord = (_score > _high_score);
         if (newRecord) { _high_score = _score; save_high_score(); }
 
@@ -2291,6 +2294,20 @@ namespace ci
                     for (Entity e = Entity::first(); !e.eof(); e.next())
                         if (e.test(gsMask)) { gameOver = e.get<GameStatus>().gameOver; won = e.get<GameStatus>().won; break; }
 
+                    // Save terminal stats so endgame_draw() always has correct values.
+                    // Runs once (next frame the !gameOver&&!won gate stops systems).
+                    if (gameOver || (won && _current_level == 4)) {
+                        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+                            if (!e.test(gsMask)) continue;
+                            const auto& gs2 = e.get<GameStatus>();
+                            _prev_kills     = gs2.kills;
+                            _prev_shots     = gs2.shots;
+                            _prev_hits      = gs2.hits;
+                            _prev_wave_secs = (int)((SDL_GetTicks() - gs2.waveStartTime) / 1000);
+                            break;
+                        }
+                    }
+
                     if (won && _current_level < 4) {
                         // ── Save stats NOW, before spawn_enemy_wave() zeros them ──
                         for (Entity e = Entity::first(); !e.eof(); e.next()) {
@@ -2307,7 +2324,20 @@ namespace ci
                         clear_enemies_only();
                         spawn_enemy_wave();
                         // Level 4 gets a longer, phased dramatic splash (5 s)
-                        Entity::create().add(LevelSplash{_current_level == 4 ? 300 : 150});
+                        const int splashFrames = (_current_level == 4 ? 300 : 150);
+                        Entity::create().add(LevelSplash{splashFrames});
+                        // Player is invulnerable for the whole splash so the new wave
+                        // can't snipe them during the transition screen.
+                        {
+                            static const Mask plInvMask = MaskBuilder()
+                                .set<PlayerTag>().set<Invincibility>().build();
+                            for (Entity e = Entity::first(); !e.eof(); e.next()) {
+                                if (!e.test(plInvMask)) continue;
+                                auto& inv = e.get<Invincibility>();
+                                if (inv.frames < splashFrames) inv.frames = splashFrames;
+                                break;
+                            }
+                        }
                         Entity::create().add(SoundEvent{4});
                         won = false;
                     }
