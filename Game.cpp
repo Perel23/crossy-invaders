@@ -26,7 +26,7 @@ namespace ci
     // ─────────────────────────────── Constructor / Destructor ────────────────────
     Game::Game()
     {
-        if (!SDL_Init(SDL_INIT_VIDEO)) { cout << SDL_GetError() << endl; return; }
+        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) { cout << SDL_GetError() << endl; return; }
         if (!SDL_CreateWindowAndRenderer("Crossy Invaders", WIN_W, WIN_H, 0, &win, &ren)) {
             cout << SDL_GetError() << endl; return;
         }
@@ -517,20 +517,28 @@ namespace ci
     // ──────────────────────────────── Background ─────────────────────────────────
     void Game::draw_background() const
     {
-        // tiltY: screen-Y offset applied to a point at world-X wx
-        auto tiltY = [&](float wx) -> float { return (wx - WIN_W * 0.5f) * TILT; };
+        // tiltY: screen-Y offset applied to a point at screen-X sx
+        auto tiltY = [&](float sx) -> float { return (sx - WIN_W * 0.5f) * TILT; };
 
-        // fillPara: draw a tilted lane band as a parallelogram
+        // camX: horizontal scroll coupled to vertical scroll so camera moves diagonally NE
+        const float camX = _camera_scroll * TILT;
+
+        // fillPara: draw a tilted, isometric-shifted lane band as a parallelogram
         auto fillPara = [&](float world_y_top, float h, Uint8 r, Uint8 g, Uint8 b) {
-            const float yTL = world_y_top + _camera_scroll + tiltY(0.f);
-            const float yTR = world_y_top + _camera_scroll + tiltY((float)WIN_W);
+            // bXAdj: isometric X shift for this lane; camX scrolls it NE
+            const float bXAdj = -(world_y_top + h * 0.5f - WIN_H + TILE * 0.5f) * TILT - camX;
+            constexpr float EXTRA = 450.f;
+            const float x0 = bXAdj - EXTRA;
+            const float x1 = WIN_W + bXAdj + EXTRA;
+            const float yTL = world_y_top + _camera_scroll + tiltY(x0);
+            const float yTR = world_y_top + _camera_scroll + tiltY(x1);
             if (std::max(yTL, yTR) + h < 0.f || std::min(yTL, yTR) > (float)WIN_H) return;
             const SDL_FColor fc = {r / 255.f, g / 255.f, b / 255.f, 1.f};
             const SDL_Vertex v[4] = {
-                {{0.f,          yTL},     fc, {0,0}},
-                {{(float)WIN_W, yTR},     fc, {0,0}},
-                {{(float)WIN_W, yTR + h}, fc, {0,0}},
-                {{0.f,          yTL + h}, fc, {0,0}},
+                {{x0, yTL},     fc, {0,0}},
+                {{x1, yTR},     fc, {0,0}},
+                {{x1, yTR + h}, fc, {0,0}},
+                {{x0, yTL + h}, fc, {0,0}},
             };
             const int idx[6] = {0,1,2, 0,2,3};
             SDL_RenderGeometry(ren, nullptr, v, 4, idx, 6);
@@ -577,10 +585,10 @@ namespace ci
             const int tl = ((lane % LANES) + LANES) % LANES;
             if (tl != 4 && tl != 6) continue;
             const float worldCY = WIN_H - lane * TILE - TILE / 2.f;
-            for (int x = 0; x < WIN_W; x += 40) {
-                const float cx    = (float)x + 12.f;
+            const float dXAdj   = -(worldCY - WIN_H + TILE * 0.5f) * TILT - camX;
+            for (float cx = dXAdj - 450.f; cx < WIN_W + dXAdj + 450.f; cx += 40.f) {
                 const float dashY = worldCY + _camera_scroll + tiltY(cx) - 3.f;
-                SDL_FRect dash = {(float)x, dashY, 24.f, 6.f};
+                SDL_FRect dash = {cx, dashY, 24.f, 6.f};
                 SDL_RenderFillRect(ren, &dash);
             }
         }
@@ -592,11 +600,14 @@ namespace ci
         else                          SDL_SetRenderDrawColor(ren,  20,  30,  60, 255);
         for (int lane = -1; lane <= LANES + 35; lane++) {
             const float worldY = WIN_H - lane * TILE;
-            const float yL = worldY + _camera_scroll + tiltY(0.f);
-            const float yR = worldY + _camera_scroll + tiltY((float)WIN_W);
+            const float dXAdj  = ((float)lane * TILE - TILE * 0.5f) * TILT - camX;
+            const float x0 = dXAdj - 450.f;
+            const float x1 = WIN_W + dXAdj + 450.f;
+            const float yL = worldY + _camera_scroll + tiltY(x0);
+            const float yR = worldY + _camera_scroll + tiltY(x1);
             if (yL < -(float)TILE && yR < -(float)TILE) continue;
             if (yL > (float)WIN_H + TILE && yR > (float)WIN_H + TILE) continue;
-            SDL_RenderLine(ren, 0.f, yL, (float)WIN_W, yR);
+            SDL_RenderLine(ren, x0, yL, x1, yR);
         }
 
         // Level 4: scatter stars in screen space (no tilt needed)
@@ -1605,6 +1616,9 @@ namespace ci
         static const Mask lpEMask2     = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Health>().build();
         static const Mask worldMask    = MaskBuilder().set<Transform>().build();
 
+        // Diagonal camera: horizontal offset coupled to vertical camera scroll
+        const float camX = _camera_scroll * TILT;
+
         // Build depth-sorted draw list (back-to-front: smaller world Y = farther = drawn first)
         static std::vector<Entity> drawList;
         drawList.clear();
@@ -1624,13 +1638,15 @@ namespace ci
             if (e.test(ftMask)) {
                 const auto& ft = e.get<FloatingText>();
                 const SDL_FPoint p = e.get<Transform>().p;
-                const float screenY = p.y + _camera_scroll + (p.x - WIN_W * 0.5f) * TILT;
+                const float ftXAdj  = -(p.y - WIN_H + TILE * 0.5f) * TILT;
+                const float ftScrX  = p.x + ftXAdj - camX;
+                const float screenY = p.y + _camera_scroll + (ftScrX - WIN_W * 0.5f) * TILT;
                 if (screenY > -20.f && screenY < WIN_H + 20.f) {
                     SDL_SetRenderScale(ren, 1.5f, 1.5f);
                     SDL_SetRenderDrawColor(ren, 255, 220, 30, 255);
                     char tbuf[16];
                     SDL_snprintf(tbuf, sizeof(tbuf), "+%d", ft.value * ft.mult);
-                    SDL_RenderDebugText(ren, (p.x - 12.f) / 1.5f, screenY / 1.5f, tbuf);
+                    SDL_RenderDebugText(ren, (ftScrX - 12.f) / 1.5f, screenY / 1.5f, tbuf);
                     SDL_SetRenderScale(ren, 1.f, 1.f);
                 }
                 continue;
@@ -1643,10 +1659,13 @@ namespace ci
                 float progress = 1.0f - (float)ex.frames / ex.maxFrames;
                 float size     = ex.startSize * (1.0f + progress * 1.8f);
                 Uint8 alpha    = (Uint8)(255 * (1.0f - progress));
+                const float exXAdj  = -(p.y - WIN_H + TILE * 0.5f) * TILT;
+                const float exScrX  = p.x + exXAdj - camX;
+                const float exTiltOff = (exScrX - WIN_W * 0.5f) * TILT;
                 SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
                 SDL_SetRenderDrawColor(ren, 255, (Uint8)(200 - (Uint8)(100*progress)), 30, alpha);
                 const float szH = size * ISO_SCALE;
-                SDL_FRect er = {p.x - size/2, p.y - szH/2 + _camera_scroll + (p.x - WIN_W*0.5f)*TILT, size, szH};
+                SDL_FRect er = {exScrX - size/2, p.y - szH/2 + _camera_scroll + exTiltOff, size, szH};
                 SDL_RenderFillRect(ren, &er);
                 SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
                 continue;
@@ -1658,8 +1677,10 @@ namespace ci
                 const SDL_FPoint p = e.get<Transform>().p;
                 constexpr float PICK_SZ = 30.f;
                 const float sqPH = PICK_SZ * ISO_SCALE;
-                const float pickTiltOff = (p.x - WIN_W * 0.5f) * TILT;
-                const SDL_FRect pr = {p.x - PICK_SZ/2.f, p.y - sqPH/2.f + _camera_scroll + pickTiltOff, PICK_SZ, sqPH};
+                const float pkXAdj      = -(p.y - WIN_H + TILE * 0.5f) * TILT;
+                const float pkScrX      = p.x + pkXAdj - camX;
+                const float pickTiltOff = (pkScrX - WIN_W * 0.5f) * TILT;
+                const SDL_FRect pr = {pkScrX - PICK_SZ/2.f, p.y - sqPH/2.f + _camera_scroll + pickTiltOff, PICK_SZ, sqPH};
 
                 if (type == 2 && hearts_texture) {
                     float tw = 0, th = 0; SDL_GetTextureSize(hearts_texture, &tw, &th);
@@ -1679,7 +1700,7 @@ namespace ci
                 SDL_SetRenderScale(ren, 1.5f, 1.5f);
                 SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
                 const char* labels[] = {"R", "S", "H", "W"};
-                SDL_RenderDebugText(ren, (p.x - 3.f) / 1.5f, (p.y + _camera_scroll + pickTiltOff - 4.f) / 1.5f, labels[type]);
+                SDL_RenderDebugText(ren, (pkScrX - 3.f) / 1.5f, (p.y + _camera_scroll + pickTiltOff - 4.f) / 1.5f, labels[type]);
                 SDL_SetRenderScale(ren, 1.f, 1.f);
                 continue;
             }
@@ -1688,6 +1709,9 @@ namespace ci
 
             const auto& t = e.get<Transform>();
             const auto& d = e.get<Drawable>();
+            // Isometric X shift: entities at higher lanes shift left on screen
+            const float xAdj    = -(t.p.y - WIN_H + TILE * 0.5f) * TILT;
+            const float screenX = t.p.x + xAdj - camX;
             // Hop visual offset — Y arc + diagonal X drift when moving forward/back
             float hopOffY = 0.f, hopOffX = 0.f;
             if (e.has<HopState>() && e.get<HopState>().frames > 0) {
@@ -1696,15 +1720,15 @@ namespace ci
                 hopOffY = sinT * HOP_HEIGHT;
                 hopOffX = sinT * HOP_HEIGHT * TILT * hop.hopDX;
             }
-            const float tiltOff = (t.p.x - WIN_W * 0.5f) * TILT;
+            const float tiltOff = (screenX - WIN_W * 0.5f) * TILT;
             const float sqH = d.size.y * ISO_SCALE;
-            SDL_FRect dest = {t.p.x - d.size.x/2 - hopOffX, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY, d.size.x, sqH};
+            SDL_FRect dest = {screenX - d.size.x/2 - hopOffX, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY, d.size.x, sqH};
 
             // Iron Dome shield halo
             if (e.test(playerMask) && e.get<Shield>().timer > 0.f) {
                 constexpr float DOME_W = Game::TILE * 2.1f;
                 constexpr float DOME_H = DOME_W * (369.f / 676.f) * ISO_SCALE;
-                const SDL_FRect domeRect = {t.p.x - DOME_W/2.f - hopOffX, t.p.y - DOME_H/2.f + _camera_scroll + tiltOff - hopOffY, DOME_W, DOME_H};
+                const SDL_FRect domeRect = {screenX - DOME_W/2.f - hopOffX, t.p.y - DOME_H/2.f + _camera_scroll + tiltOff - hopOffY, DOME_W, DOME_H};
                 if (iron_dome_texture) {
                     const float phase = e.get<Shield>().timer / SHIELD_DURATION;
                     const Uint8 alpha = (Uint8)(180 + 60 * std::abs(std::sin(phase * 12.f)));
@@ -1743,7 +1767,7 @@ namespace ci
                 }
             } else if (e.test(hazardVisMsk)) {
                 const int idx = e.get<HazardVisual>().tex_index;
-                const float cx = t.p.x;
+                const float cx = screenX;
                 const float cy = t.p.y + _camera_scroll + tiltOff;
                 const float hw = d.size.x * 0.5f;
                 const float hh = sqH * 0.5f;
@@ -1805,9 +1829,11 @@ namespace ci
             for (Entity e = Entity::first(); !e.eof(); e.next()) {
                 if (!e.test(warnMask)) continue;
                 const SDL_FPoint p  = e.get<Transform>().p;
-                const float screenY = p.y + _camera_scroll + (p.x - WIN_W * 0.5f) * TILT;
+                const float arXAdj  = -(p.y - WIN_H + TILE * 0.5f) * TILT;
+                const float arScrX  = p.x + arXAdj - camX;
+                const float screenY = p.y + _camera_scroll + (arScrX - WIN_W * 0.5f) * TILT;
                 if (screenY >= 0.f) continue;
-                const float ax = std::clamp(p.x, 12.f, (float)WIN_W - 12.f);
+                const float ax = std::clamp(arScrX, 12.f, (float)WIN_W - 12.f);
                 SDL_Vertex verts[3] = {
                     {{ax,         8.f}, {255, 255, 0, 255}, {0,0}},
                     {{ax - 9.f, 24.f}, {255, 200, 0, 255}, {0,0}},
@@ -1889,6 +1915,8 @@ namespace ci
 
             // Power-up timer bars near player sprite
             const SDL_FPoint p = e.get<Transform>().p;
+            const float hudXAdj   = -(p.y - WIN_H + TILE * 0.5f) * TILT;
+            const float hudScrX   = p.x + hudXAdj - camX;
             float hudHopOff = 0.f, hudHopOffX = 0.f;
             if (e.has<HopState>() && e.get<HopState>().frames > 0) {
                 const auto& hop = e.get<HopState>();
@@ -1896,9 +1924,9 @@ namespace ci
                 hudHopOff  = sinT * HOP_HEIGHT;
                 hudHopOffX = sinT * HOP_HEIGHT * TILT * hop.hopDX;
             }
-            const float screenY = p.y + _camera_scroll + (p.x - WIN_W * 0.5f) * TILT - hudHopOff;
+            const float screenY = p.y + _camera_scroll + (hudScrX - WIN_W * 0.5f) * TILT - hudHopOff;
             const float barW    = 48.f;
-            const float barX    = p.x - barW / 2.f - hudHopOffX;
+            const float barX    = hudScrX - barW / 2.f - hudHopOffX;
             float barY          = screenY + 30.f;
 
             const auto& rf = e.get<RapidFire>();
