@@ -55,6 +55,8 @@ namespace ci
 		void combo_system() const;
 		void splash_system() const;
 		void floating_text_system() const;
+		void sound_system() const;
+		void hop_system() const;
 		void play_sfx(int type) const;
 		void load_high_score();
 		void save_high_score() const;

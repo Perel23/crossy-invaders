@@ -10,11 +10,14 @@ using namespace bagel;
 
 namespace ci
 {
-    static constexpr int ENEMY_ROWS      = 2;
-    static constexpr int ENEMY_COLS      = 8;
-    static constexpr int BOSS_HP         = 40;
-    static constexpr int ENEMY_START_COL = (Game::COLS - ENEMY_COLS) / 2;
-    static constexpr int ENEMY_TOP_LANE  = Game::LANES - 2;
+    static constexpr int   ENEMY_ROWS      = 2;
+    static constexpr int   ENEMY_COLS      = 8;
+    static constexpr int   BOSS_HP         = 40;
+    static constexpr int   ENEMY_START_COL = (Game::COLS - ENEMY_COLS) / 2;
+    static constexpr int   ENEMY_TOP_LANE  = Game::LANES - 2;
+    static constexpr float ISO_SCALE       = 0.70f;  // perspective squash factor
+    static constexpr float HOP_HEIGHT      = 18.f;   // max pixel rise during player hop
+    static constexpr float TILT            = 0.30f;  // diagonal shear: screenY += (wx - WIN_W/2)*TILT
 
     // Difficulty speed multipliers: Easy = slower enemies, Hard = faster
     static float diff_move_mult (int d) { return d == 0 ? 1.5f : d == 2 ? 0.70f : 1.0f; }
@@ -142,7 +145,8 @@ namespace ci
             DamageFlash{0},
             RapidFire{0, 0},
             DashState{0},
-            SpreadShot{0});
+            SpreadShot{0},
+            HopState{0, 10});
 
         // ── Enemies ──
         if (_current_level == 3) {
@@ -401,7 +405,7 @@ namespace ci
                 } else { // type == 3: spread shot
                     if (pl.has<SpreadShot>()) pl.get<SpreadShot>().frames = 300;
                 }
-                play_sfx(4);
+                Entity::create().add(SoundEvent{4});
                 break;
             }
             if (collected) pk.destroy();
@@ -426,6 +430,25 @@ namespace ci
             if (!e.test(mask)) continue;
             e.get<Transform>().p.y -= 1.2f;   // float upward in world space
             if (--e.get<FloatingText>().frames <= 0) e.destroy();
+        }
+    }
+
+    void Game::sound_system() const
+    {
+        static const Mask mask = MaskBuilder().set<SoundEvent>().build();
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(mask)) continue;
+            play_sfx(e.get<SoundEvent>().type);
+            e.destroy();
+        }
+    }
+
+    void Game::hop_system() const
+    {
+        static const Mask mask = MaskBuilder().set<HopState>().build();
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(mask)) continue;
+            if (e.get<HopState>().frames > 0) e.get<HopState>().frames--;
         }
     }
 
@@ -494,42 +517,58 @@ namespace ci
     // ──────────────────────────────── Background ─────────────────────────────────
     void Game::draw_background() const
     {
-        for (int lane = -2; lane < LANES + 35; lane++) {
-            const float y = WIN_H - (lane + 1) * TILE + _camera_scroll;
-            if (y + TILE < 0.f || y > (float)WIN_H) continue;
-            SDL_FRect rect = {0.f, y, (float)WIN_W, (float)TILE};
-            const int tl = ((lane % LANES) + LANES) % LANES;
+        // tiltY: screen-Y offset applied to a point at world-X wx
+        auto tiltY = [&](float wx) -> float { return (wx - WIN_W * 0.5f) * TILT; };
 
+        // fillPara: draw a tilted lane band as a parallelogram
+        auto fillPara = [&](float world_y_top, float h, Uint8 r, Uint8 g, Uint8 b) {
+            const float yTL = world_y_top + _camera_scroll + tiltY(0.f);
+            const float yTR = world_y_top + _camera_scroll + tiltY((float)WIN_W);
+            if (std::max(yTL, yTR) + h < 0.f || std::min(yTL, yTR) > (float)WIN_H) return;
+            const SDL_FColor fc = {r / 255.f, g / 255.f, b / 255.f, 1.f};
+            const SDL_Vertex v[4] = {
+                {{0.f,          yTL},     fc, {0,0}},
+                {{(float)WIN_W, yTR},     fc, {0,0}},
+                {{(float)WIN_W, yTR + h}, fc, {0,0}},
+                {{0.f,          yTL + h}, fc, {0,0}},
+            };
+            const int idx[6] = {0,1,2, 0,2,3};
+            SDL_RenderGeometry(ren, nullptr, v, 4, idx, 6);
+        };
+
+        for (int lane = -2; lane < LANES + 35; lane++) {
+            const float world_y_top = WIN_H - (lane + 1) * TILE;
+            const int tl = ((lane % LANES) + LANES) % LANES;
+            Uint8 r, g, b;
             if (_current_level == 1) {
-                if      (tl <= 1)            SDL_SetRenderDrawColor(ren,  20,  70,  20, 255);
-                else if (tl == 4 || tl == 6) SDL_SetRenderDrawColor(ren,  40,  40,  50, 255);
-                else if (tl == 5)            SDL_SetRenderDrawColor(ren,  28,  55,  28, 255);
-                else if (tl >= LANES - 2)    SDL_SetRenderDrawColor(ren,  35,   8,   8, 255);
-                else                         SDL_SetRenderDrawColor(ren,  24,  55,  24, 255);
+                if      (tl <= 1)            { r= 20; g= 70; b= 20; }
+                else if (tl == 4 || tl == 6) { r= 40; g= 40; b= 50; }
+                else if (tl == 5)            { r= 28; g= 55; b= 28; }
+                else if (tl >= LANES - 2)    { r= 35; g=  8; b=  8; }
+                else                         { r= 24; g= 55; b= 24; }
             } else if (_current_level == 2) {
-                if      (tl <= 1)            SDL_SetRenderDrawColor(ren, 160, 120,  50, 255);
-                else if (tl == 4 || tl == 6) SDL_SetRenderDrawColor(ren,  90,  75,  40, 255);
-                else if (tl == 5)            SDL_SetRenderDrawColor(ren, 130, 100,  45, 255);
-                else if (tl >= LANES - 2)    SDL_SetRenderDrawColor(ren,  80,  25,  10, 255);
-                else                         SDL_SetRenderDrawColor(ren, 145, 110,  48, 255);
+                if      (tl <= 1)            { r=160; g=120; b= 50; }
+                else if (tl == 4 || tl == 6) { r= 90; g= 75; b= 40; }
+                else if (tl == 5)            { r=130; g=100; b= 45; }
+                else if (tl >= LANES - 2)    { r= 80; g= 25; b= 10; }
+                else                         { r=145; g=110; b= 48; }
             } else if (_current_level == 3) {
-                if      (tl <= 1)            SDL_SetRenderDrawColor(ren,  25,  20,  35, 255);
-                else if (tl == 4 || tl == 6) SDL_SetRenderDrawColor(ren,  18,  15,  25, 255);
-                else if (tl == 5)            SDL_SetRenderDrawColor(ren,  30,  20,  40, 255);
-                else if (tl >= LANES - 2)    SDL_SetRenderDrawColor(ren,  50,   5,   5, 255);
-                else                         SDL_SetRenderDrawColor(ren,  22,  18,  30, 255);
+                if      (tl <= 1)            { r= 25; g= 20; b= 35; }
+                else if (tl == 4 || tl == 6) { r= 18; g= 15; b= 25; }
+                else if (tl == 5)            { r= 30; g= 20; b= 40; }
+                else if (tl >= LANES - 2)    { r= 50; g=  5; b=  5; }
+                else                         { r= 22; g= 18; b= 30; }
             } else {
-                // Level 4: deep space — blue-black gradient
-                if      (tl <= 1)            SDL_SetRenderDrawColor(ren,   8,  15,  35, 255);
-                else if (tl == 4 || tl == 6) SDL_SetRenderDrawColor(ren,  12,  10,  20, 255);
-                else if (tl == 5)            SDL_SetRenderDrawColor(ren,  15,  12,  28, 255);
-                else if (tl >= LANES - 2)    SDL_SetRenderDrawColor(ren,  35,   5,  50, 255);
-                else                         SDL_SetRenderDrawColor(ren,   6,  10,  25, 255);
+                if      (tl <= 1)            { r=  8; g= 15; b= 35; }
+                else if (tl == 4 || tl == 6) { r= 12; g= 10; b= 20; }
+                else if (tl == 5)            { r= 15; g= 12; b= 28; }
+                else if (tl >= LANES - 2)    { r= 35; g=  5; b= 50; }
+                else                         { r=  6; g= 10; b= 25; }
             }
-            SDL_RenderFillRect(ren, &rect);
+            fillPara(world_y_top, (float)TILE, r, g, b);
         }
 
-        // Road dashes
+        // Road dashes (placed at tilted centre-line of each road lane)
         if      (_current_level == 1) SDL_SetRenderDrawColor(ren, 180, 160,  30, 255);
         else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 120, 100,  30, 255);
         else if (_current_level == 3) SDL_SetRenderDrawColor(ren,  60,  40,  80, 255);
@@ -537,27 +576,30 @@ namespace ci
         for (int lane = -2; lane < LANES + 35; lane++) {
             const int tl = ((lane % LANES) + LANES) % LANES;
             if (tl != 4 && tl != 6) continue;
-            const float cy = WIN_H - lane * TILE - TILE / 2.f + _camera_scroll;
-            if (cy < -(float)TILE || cy > (float)WIN_H + TILE) continue;
+            const float worldCY = WIN_H - lane * TILE - TILE / 2.f;
             for (int x = 0; x < WIN_W; x += 40) {
-                SDL_FRect dash = {(float)x, cy - 3.f, 24.f, 6.f};
+                const float cx    = (float)x + 12.f;
+                const float dashY = worldCY + _camera_scroll + tiltY(cx) - 3.f;
+                SDL_FRect dash = {(float)x, dashY, 24.f, 6.f};
                 SDL_RenderFillRect(ren, &dash);
             }
         }
 
-        // Lane dividers
+        // Lane dividers (diagonal lines)
         if      (_current_level == 1) SDL_SetRenderDrawColor(ren,  55,  55,  55, 255);
         else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 100,  80,  40, 255);
         else if (_current_level == 3) SDL_SetRenderDrawColor(ren,  40,  30,  55, 255);
         else                          SDL_SetRenderDrawColor(ren,  20,  30,  60, 255);
         for (int lane = -1; lane <= LANES + 35; lane++) {
-            const float y = WIN_H - lane * TILE + _camera_scroll;
-            if (y < -1.f || y > (float)WIN_H + 1.f) continue;
-            SDL_FRect line = {0.f, y, (float)WIN_W, 1.f};
-            SDL_RenderFillRect(ren, &line);
+            const float worldY = WIN_H - lane * TILE;
+            const float yL = worldY + _camera_scroll + tiltY(0.f);
+            const float yR = worldY + _camera_scroll + tiltY((float)WIN_W);
+            if (yL < -(float)TILE && yR < -(float)TILE) continue;
+            if (yL > (float)WIN_H + TILE && yR > (float)WIN_H + TILE) continue;
+            SDL_RenderLine(ren, 0.f, yL, (float)WIN_W, yR);
         }
 
-        // Level 4: scatter some "stars" using pseudo-random positions
+        // Level 4: scatter stars in screen space (no tilt needed)
         if (_current_level == 4) {
             SDL_SetRenderDrawColor(ren, 150, 180, 255, 255);
             for (int i = 0; i < 60; i++) {
@@ -1052,6 +1094,12 @@ namespace ci
                         e.get<Invincibility>().frames = std::max(e.get<Invincibility>().frames, 12);
                 }
 
+                // Hop animation
+                if (e.has<HopState>()) {
+                    auto& hop = e.get<HopState>();
+                    hop.frames = hop.maxFrames;
+                }
+
                 // Footstep dust particle at old position
                 Entity::create().addAll(Transform{oldPos, 0.f}, Explosion{8, 8, 10.f});
             } else if (!any) {
@@ -1196,7 +1244,7 @@ namespace ci
                     Entity::create().addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{6.f,14.f}},
                                            BulletTag{true}, Velocity{0.f, playerBulletDY});
                 }
-                play_sfx(0);
+                Entity::create().add(SoundEvent{0});
             }
         }
 
@@ -1267,7 +1315,7 @@ namespace ci
             const float sf  = fromPl ? 1.0f : slowFactor;
             t.p.x += v.dx * sf;
             t.p.y += v.dy * sf;
-            const float screenY = t.p.y + _camera_scroll;
+            const float screenY = t.p.y + _camera_scroll + (t.p.x - WIN_W * 0.5f) * TILT;
             if (screenY < -(float)TILE || screenY > (float)WIN_H + TILE)
                 e.destroy();
         }
@@ -1284,7 +1332,7 @@ namespace ci
             t.p.x += dx;
             if (t.p.x - hw >  WIN_W) t.p.x = -hw;
             if (t.p.x + hw <  0)     t.p.x =  WIN_W + hw;
-            const float screenY = t.p.y + _camera_scroll;
+            const float screenY = t.p.y + _camera_scroll + (t.p.x - WIN_W * 0.5f) * TILT;
             if (screenY > (float)WIN_H + TILE) {
                 t.p.y  -= LANES * TILE;
                 t.p.x   = (float)(std::rand() % WIN_W);
@@ -1326,7 +1374,7 @@ namespace ci
                     smc.frames   = 180;   // 3 s
                     smc.cooldown = 600;   // 10 s total cooldown
                     s.slowmoFired = true;
-                    play_sfx(6);
+                    Entity::create().add(SoundEvent{6});
                 } else if (!s.slowmo) {
                     s.slowmoFired = false;
                 }
@@ -1378,7 +1426,7 @@ namespace ci
             pl.get<Invincibility>().frames = 90;
             pl.get<DamageFlash>().frames   = 22;
             gsEnt.get<ScreenShake>().frames = 8;
-            play_sfx(3);
+            Entity::create().add(SoundEvent{3});
         };
 
         auto kill_enemy = [&](Entity en) {
@@ -1411,7 +1459,7 @@ namespace ci
                 Entity::create().addAll(Transform{{pos.x, dropY}, 0.f},
                                        Drawable{{0,0,0,0},{28.f, 28.f}}, Pickup{type});
             }
-            play_sfx(2);
+            Entity::create().add(SoundEvent{2});
         };
 
         // Bullet × shelter
@@ -1439,7 +1487,7 @@ namespace ci
                 b.destroy();
                 gs.hits++;
                 if (--en.get<Health>().hp <= 0) kill_enemy(en);
-                else play_sfx(1);
+                else Entity::create().add(SoundEvent{1});
                 break;
             }
         }
@@ -1487,7 +1535,8 @@ namespace ci
         if (_current_level != 4) {
             for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
                 if (!pl.test(playerMask)) continue;
-                if (pl.get<Transform>().p.y + _camera_scroll > WIN_H + TILE / 2.f) {
+                const SDL_FPoint& pPos = pl.get<Transform>().p;
+                if (pPos.y + _camera_scroll + (pPos.x - WIN_W * 0.5f) * TILT > WIN_H + TILE / 2.f) {
                     gs.gameOver = true; return;
                 }
                 break;
@@ -1553,13 +1602,28 @@ namespace ci
         static const Mask pickupMask   = MaskBuilder().set<Pickup>().set<Transform>().build();
         static const Mask ftMask       = MaskBuilder().set<FloatingText>().set<Transform>().build();
         static const Mask lpEMask2     = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Health>().build();
+        static const Mask worldMask    = MaskBuilder().set<Transform>().build();
 
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+        // Build depth-sorted draw list (back-to-front: smaller world Y = farther = drawn first)
+        static std::vector<Entity> drawList;
+        drawList.clear();
+        for (Entity e = Entity::first(); !e.eof(); e.next())
+            if (e.test(worldMask)) drawList.push_back(e);
+        std::sort(drawList.begin(), drawList.end(),
+            [](const Entity& a, const Entity& b) {
+                const SDL_FPoint pa = a.get<Transform>().p;
+                const SDL_FPoint pb = b.get<Transform>().p;
+                const float ya = pa.y + (pa.x - WIN_W * 0.5f) * TILT;
+                const float yb = pb.y + (pb.x - WIN_W * 0.5f) * TILT;
+                return ya < yb;
+            });
+
+        for (Entity e : drawList) {
             // FloatingText pop-ups
             if (e.test(ftMask)) {
                 const auto& ft = e.get<FloatingText>();
                 const SDL_FPoint p = e.get<Transform>().p;
-                const float screenY = p.y + _camera_scroll;
+                const float screenY = p.y + _camera_scroll + (p.x - WIN_W * 0.5f) * TILT;
                 if (screenY > -20.f && screenY < WIN_H + 20.f) {
                     SDL_SetRenderScale(ren, 1.5f, 1.5f);
                     SDL_SetRenderDrawColor(ren, 255, 220, 30, 255);
@@ -1580,7 +1644,8 @@ namespace ci
                 Uint8 alpha    = (Uint8)(255 * (1.0f - progress));
                 SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
                 SDL_SetRenderDrawColor(ren, 255, (Uint8)(200 - (Uint8)(100*progress)), 30, alpha);
-                SDL_FRect er = {p.x - size/2, p.y - size/2 + _camera_scroll, size, size};
+                const float szH = size * ISO_SCALE;
+                SDL_FRect er = {p.x - size/2, p.y - szH/2 + _camera_scroll + (p.x - WIN_W*0.5f)*TILT, size, szH};
                 SDL_RenderFillRect(ren, &er);
                 SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
                 continue;
@@ -1591,7 +1656,9 @@ namespace ci
                 const int type = e.get<Pickup>().type;
                 const SDL_FPoint p = e.get<Transform>().p;
                 constexpr float PICK_SZ = 30.f;
-                const SDL_FRect pr = {p.x - PICK_SZ/2.f, p.y - PICK_SZ/2.f + _camera_scroll, PICK_SZ, PICK_SZ};
+                const float sqPH = PICK_SZ * ISO_SCALE;
+                const float pickTiltOff = (p.x - WIN_W * 0.5f) * TILT;
+                const SDL_FRect pr = {p.x - PICK_SZ/2.f, p.y - sqPH/2.f + _camera_scroll + pickTiltOff, PICK_SZ, sqPH};
 
                 if (type == 2 && hearts_texture) {
                     float tw = 0, th = 0; SDL_GetTextureSize(hearts_texture, &tw, &th);
@@ -1611,7 +1678,7 @@ namespace ci
                 SDL_SetRenderScale(ren, 1.5f, 1.5f);
                 SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
                 const char* labels[] = {"R", "S", "H", "W"};
-                SDL_RenderDebugText(ren, (p.x - 3.f) / 1.5f, (p.y + _camera_scroll - 4.f) / 1.5f, labels[type]);
+                SDL_RenderDebugText(ren, (p.x - 3.f) / 1.5f, (p.y + _camera_scroll + pickTiltOff - 4.f) / 1.5f, labels[type]);
                 SDL_SetRenderScale(ren, 1.f, 1.f);
                 continue;
             }
@@ -1620,13 +1687,21 @@ namespace ci
 
             const auto& t = e.get<Transform>();
             const auto& d = e.get<Drawable>();
-            SDL_FRect dest = {t.p.x - d.size.x/2, t.p.y - d.size.y/2 + _camera_scroll, d.size.x, d.size.y};
+            // Hop visual offset (player only; zero for all other entities)
+            float hopOffY = 0.f;
+            if (e.has<HopState>() && e.get<HopState>().frames > 0) {
+                const auto& hop = e.get<HopState>();
+                hopOffY = std::sin(M_PI * (float)hop.frames / hop.maxFrames) * HOP_HEIGHT;
+            }
+            const float tiltOff = (t.p.x - WIN_W * 0.5f) * TILT;
+            const float sqH = d.size.y * ISO_SCALE;
+            SDL_FRect dest = {t.p.x - d.size.x/2, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY, d.size.x, sqH};
 
             // Iron Dome shield halo
             if (e.test(playerMask) && e.get<Shield>().timer > 0.f) {
                 constexpr float DOME_W = Game::TILE * 2.1f;
-                constexpr float DOME_H = DOME_W * (369.f / 676.f);
-                const SDL_FRect domeRect = {t.p.x - DOME_W/2.f, t.p.y - DOME_H/2.f + _camera_scroll, DOME_W, DOME_H};
+                constexpr float DOME_H = DOME_W * (369.f / 676.f) * ISO_SCALE;
+                const SDL_FRect domeRect = {t.p.x - DOME_W/2.f, t.p.y - DOME_H/2.f + _camera_scroll + tiltOff - hopOffY, DOME_W, DOME_H};
                 if (iron_dome_texture) {
                     const float phase = e.get<Shield>().timer / SHIELD_DURATION;
                     const Uint8 alpha = (Uint8)(180 + 60 * std::abs(std::sin(phase * 12.f)));
@@ -1665,8 +1740,24 @@ namespace ci
                 }
             } else if (e.test(hazardVisMsk)) {
                 const int idx = e.get<HazardVisual>().tex_index;
-                if (haz_textures[idx]) SDL_RenderTexture(ren, haz_textures[idx], nullptr, &dest);
-                else { SDL_SetRenderDrawColor(ren, 0, 200, 220, 255); SDL_RenderFillRect(ren, &dest); }
+                const float cx = t.p.x;
+                const float cy = t.p.y + _camera_scroll + tiltOff;
+                const float hw = d.size.x * 0.5f;
+                const float hh = sqH * 0.5f;
+                const float sh = hw * TILT;
+                if (haz_textures[idx]) {
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                    const SDL_FColor wh = {1.f, 1.f, 1.f, 1.f};
+                    SDL_Vertex v[4] = {
+                        {{cx - hw, cy - hh - sh}, wh, {0.f, 0.f}},
+                        {{cx + hw, cy - hh + sh}, wh, {1.f, 0.f}},
+                        {{cx + hw, cy + hh + sh}, wh, {1.f, 1.f}},
+                        {{cx - hw, cy + hh - sh}, wh, {0.f, 1.f}},
+                    };
+                    const int hidx[6] = {0,1,2, 0,2,3};
+                    SDL_RenderGeometry(ren, haz_textures[idx], v, 4, hidx, 6);
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+                } else { SDL_SetRenderDrawColor(ren, 0, 200, 220, 255); SDL_RenderFillRect(ren, &dest); }
             } else if (e.test(bossMask)) {
                 const int hp = e.get<Health>().hp;
                 const Uint8 g = (Uint8)(255 * hp / BOSS_HP);
@@ -1711,7 +1802,7 @@ namespace ci
             for (Entity e = Entity::first(); !e.eof(); e.next()) {
                 if (!e.test(warnMask)) continue;
                 const SDL_FPoint p  = e.get<Transform>().p;
-                const float screenY = p.y + _camera_scroll;
+                const float screenY = p.y + _camera_scroll + (p.x - WIN_W * 0.5f) * TILT;
                 if (screenY >= 0.f) continue;
                 const float ax = std::clamp(p.x, 12.f, (float)WIN_W - 12.f);
                 SDL_Vertex verts[3] = {
@@ -1795,7 +1886,12 @@ namespace ci
 
             // Power-up timer bars near player sprite
             const SDL_FPoint p = e.get<Transform>().p;
-            const float screenY = p.y + _camera_scroll;
+            float hudHopOff = 0.f;
+            if (e.has<HopState>() && e.get<HopState>().frames > 0) {
+                const auto& hop = e.get<HopState>();
+                hudHopOff = std::sin(M_PI * (float)hop.frames / hop.maxFrames) * HOP_HEIGHT;
+            }
+            const float screenY = p.y + _camera_scroll + (p.x - WIN_W * 0.5f) * TILT - hudHopOff;
             const float barW    = 48.f;
             const float barX    = p.x - barW / 2.f;
             float barY          = screenY + 30.f;
@@ -2024,13 +2120,6 @@ namespace ci
             kills = gs2.kills; shots = gs2.shots; hits = gs2.hits;
             break;
         }
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(gsMask)) continue;
-            auto& gs2 = e.get<GameStatus>();
-            if (!gs2.sfxPlayed) { play_sfx(gameOver ? 5 : 4); gs2.sfxPlayed = true; }
-            break;
-        }
-
         const bool newRecord = (_score > _high_score);
         if (newRecord) { _high_score = _score; save_high_score(); }
 
@@ -2166,6 +2255,7 @@ namespace ci
                     combo_system();
                     splash_system();
                     floating_text_system();
+                    hop_system();
 
                     // Camera scroll (disabled for level 4)
                     if (_current_level != 4) {
@@ -2193,12 +2283,27 @@ namespace ci
                         spawn_enemy_wave();
                         // Level 4 gets a longer, phased dramatic splash (5 s)
                         Entity::create().add(LevelSplash{_current_level == 4 ? 300 : 150});
-                        play_sfx(4);
+                        Entity::create().add(SoundEvent{4});
                         won = false;
                     }
 
                     if (_score > _high_score) { _high_score = _score; save_high_score(); }
                 }
+
+                // One-shot end-of-game sfx (fires on the first game-over/win frame)
+                if (gameOver || (won && _current_level == 4)) {
+                    for (Entity e = Entity::first(); !e.eof(); e.next()) {
+                        if (!e.test(gsMask)) continue;
+                        auto& gs2 = e.get<GameStatus>();
+                        if (!gs2.sfxPlayed) {
+                            Entity::create().add(SoundEvent{gameOver ? 5 : 4});
+                            gs2.sfxPlayed = true;
+                        }
+                        break;
+                    }
+                }
+
+                sound_system();
             }
 
             SDL_RenderClear(ren);

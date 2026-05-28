@@ -98,7 +98,21 @@
 
 ---
 
-## Next step to do → (game is complete — see upcoming steps for optional extras)
+## Next step to do → see upcoming steps for optional extras
+
+---
+
+### ✅ Step 14 — Diagonal view, sound ECS refactor, hop animation, tilt shear (2026-05-28)
+
+1. **Diagonal top-down perspective** — `ISO_SCALE = 0.70f` squashes all world-space sprite heights by 30%, giving the Crossy Road "seen from above at an angle" look. Applied to player, enemies, boss, shelters, hazards, bullets, explosions, and pickups.
+2. **Horizontal shear (TILT = 0.30f)** — Full Crossy Road diagonal: `screenY += (worldX - WIN_W/2) * TILT`. Applied everywhere: background lane bands drawn as parallelograms via `SDL_RenderGeometry` (`fillPara` helper), lane dividers as diagonal `SDL_RenderLine` calls, road dashes at tilted Y per dash centre-X. All entity screen-Y calculations add the tilt offset. Depth sort comparator uses tilted Y. Bullet despawn, hazard wrap, and camera-death checks also use tilted screen-Y.
+3. **Hazard sprite shearing** — Car/tank/plane sprites are drawn via `SDL_RenderGeometry` as sheared parallelograms (left edge up `hw*TILT`, right edge down `hw*TILT`) so they lie flat on the diagonal road surface. Player/enemy/shelter sprites keep rectangular rendering.
+4. **Depth sort (painter's algorithm)** — `draw_system()` now collects all `Transform` entities into a `std::vector<Entity>`, sorts them ascending by tilted world Y (smaller = farther = drawn first). Nearer entities overlap farther ones.
+5. **Sound ECS refactor** — `play_sfx()` is now only called from `sound_system()`. All game-logic systems fire `Entity::create().add(SoundEvent{type})` instead. `sound_system()` drains and destroys SoundEvent entities each frame. Endgame sfx trigger moved into the logic phase of `run()`.
+6. **Hop animation** — `HopState{frames, maxFrames}` component on the player. `hop_system()` decrements frames each tick. Any movement resets `frames = maxFrames = 10`. `draw_system()` applies `sin(π * frames/maxFrames) * 18px` Y offset to the player sprite, HUD bars, and Iron Dome halo.
+7. **`MaxComponents` bumped** — 32 → 64 in `bagel.h` (mask type: `uint_fast32_t` → `uint_fast64_t`).
+
+---
 
 ---
 
