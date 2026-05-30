@@ -90,6 +90,7 @@ namespace ci
 		mutable float        _level_start_scroll  = 0.f;  // value of _camera_scroll when this level began
 		mutable int          _camera_grace        = 180;  // frames before camera starts moving
 		mutable float        _select_scroll       = 0.f;  // animated select-screen background offset
+		mutable int          _select_last_char   = -1;   // last character whose anthem played (-1=none)
 		mutable int          _difficulty     = 1;     // 0=Easy 1=Normal 2=Hard (cached at game start)
 		// Previous-wave stats saved before spawn_enemy_wave() resets them, used by draw_level_splash()
 		mutable int          _prev_kills     = 0;

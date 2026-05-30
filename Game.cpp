@@ -254,6 +254,7 @@ namespace ci
             if (e.test(ssMask)) { e.get<SelectState>().moved = false; break; }
 
         _score = 0; _total_kills = 0; _camera_scroll = 0.f; _camera_grace = 180;
+        _select_last_char = -1;
         _state = GameState::Select;
     }
 
@@ -479,7 +480,12 @@ namespace ci
     void Game::play_sfx(int type) const
     {
         if (!audio_stream) return;
-        if (SDL_GetAudioStreamQueued(audio_stream) > 44100 * 150 / 1000 * (int)sizeof(Sint16)) return;
+        // Anthems (7=Hatikva, 8=Star-Spangled Banner) bypass queue throttle and clear first
+        if (type != 7 && type != 8) {
+            if (SDL_GetAudioStreamQueued(audio_stream) > 44100 * 150 / 1000 * (int)sizeof(Sint16)) return;
+        } else {
+            SDL_ClearAudioStream(audio_stream);
+        }
 
         std::vector<Sint16> buf;
         const int SR = 44100;
@@ -530,6 +536,26 @@ namespace ci
                     buf[i] = (Sint16)(32767 * v * std::sin(2 * M_PI * f * (float)i / SR));
                 }
                 break;
+            }
+            case 7: {   // Hatikva — load from res/hatikva.wav
+                SDL_AudioSpec wavSpec{};
+                Uint8* wavBuf = nullptr;
+                Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/hatikva.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen);
+                    SDL_free(wavBuf);
+                }
+                return; // data already pushed — skip buf path below
+            }
+            case 8: {   // Star-Spangled Banner — load from res/ssb.wav
+                SDL_AudioSpec wavSpec{};
+                Uint8* wavBuf = nullptr;
+                Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/ssb.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen);
+                    SDL_free(wavBuf);
+                }
+                return; // data already pushed — skip buf path below
             }
             default: return;
         }
@@ -774,6 +800,12 @@ namespace ci
             ss.moved = true;
         } else if (!lr && !ud) {
             ss.moved = false;
+        }
+
+        // Play anthem when a different character is highlighted (0=Trump/USA, 1=Bibi/Hatikva)
+        if (_select_last_char != ss.selected) {
+            _select_last_char = ss.selected;
+            play_sfx(ss.selected == 0 ? 8 : 7);
         }
     }
 
@@ -2420,6 +2452,7 @@ namespace ci
                         else if (_state == GameState::Paused)  _state = GameState::Playing;
                     }
                     if (sc == SDL_SCANCODE_SPACE && _state == GameState::Select) {
+                        if (audio_stream) SDL_ClearAudioStream(audio_stream); // stop anthem
                         _state = GameState::Playing;
                         _current_level = 1;
                         spawn_entities();
