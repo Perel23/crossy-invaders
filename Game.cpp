@@ -42,7 +42,7 @@ namespace ci
                 SDL_DestroySurface(s);
                 return t;
             };
-            bg_texture            = loadTex("res/background.png");
+            bg_texture            = nullptr; // procedural background — no image needed
             trump_select_tex      = loadTex("res/trump_pixel.png");
             bibi_select_tex       = loadTex("res/bibi_pixel.png");
             shelter_texture       = loadTex("res/miklat.png");
@@ -540,53 +540,80 @@ namespace ci
     // ──────────────────────────────── Background ─────────────────────────────────
     void Game::draw_background() const
     {
-        if (bg_texture) {
-            // ── Level-aligned, continuously-scrolling background ──────────────────
-            // Image layout (top → bottom): Level 3 / Level 2 / Level 1
-            //   secH ≈ imgH / 3 ≈ 607 rows per section.
-            //
-            // Level base rows (= srcY at level start, no camera scroll yet):
-            //   Level 1 → imgH - WIN_H  ≈ 1117   (bottom section / USA)
-            //   Level 2 → imgH - 2*secH ≈  607   (middle section / Iran)
-            //   Level 3/4 →            0          (top section / Israel)
-            //
-            // Within each level the window scrolls 1:1 with the camera (levelScroll),
-            // so every entity's world Y maps to a CONSTANT image row =
-            //   levelBase + _level_start_scroll + worldY
-            // — road lanes always fall on road pixels regardless of camera position.
-            // _level_start_scroll is captured at each level transition.
-            float imgW = 0.f, imgH = 0.f;
-            SDL_GetTextureSize(bg_texture, &imgW, &imgH);
-            const float secH = imgH / 3.f;  // 607
+        // ── Procedurally-generated scrolling lane background ──────────────────────
+        // Each lane is a coloured rectangle; colours depend on the current level.
+        // Camera scroll is applied so the bands move with the player.
 
-            const float levelBases[3] = {
-                imgH - WIN_H,        // Level 1: 1117
-                imgH - 2.f * secH,   // Level 2:  607
-                0.f                  // Level 3/4:  0
-            };
-            const int   levelIdx  = std::min(_current_level - 1, 2);
-            const float levelBase = levelBases[levelIdx];
+        for (int lane = -2; lane < LANES + 35; lane++) {
+            const float world_y_top  = WIN_H - (lane + 1) * TILE;
+            const float screen_y_top = world_y_top + _camera_scroll;
+            if (screen_y_top > (float)WIN_H + TILE) continue;
+            if (screen_y_top + TILE < -(float)TILE)  continue;
 
-            const float levelScroll = _camera_scroll - _level_start_scroll;
-            float srcY = levelBase - levelScroll;
-            srcY = std::max(0.f, std::min(srcY, imgH - WIN_H));  // clamp to image
+            const int tl = ((lane % LANES) + LANES) % LANES;
+            Uint8 r, g, b;
+            if (_current_level == 1) {
+                if      (tl <= 1)            { r= 20; g= 70; b= 20; }   // safe zone (grass)
+                else if (tl == 4 || tl == 6) { r= 40; g= 40; b= 50; }   // road lanes
+                else if (tl == 5)            { r= 28; g= 55; b= 28; }   // road median
+                else if (tl >= LANES - 2)    { r= 35; g=  8; b=  8; }   // enemy zone
+                else                         { r= 24; g= 55; b= 24; }   // open grass
+            } else if (_current_level == 2) {
+                if      (tl <= 1)            { r=160; g=120; b= 50; }   // sandy safe zone
+                else if (tl == 4 || tl == 6) { r= 90; g= 75; b= 40; }   // dirt road
+                else if (tl == 5)            { r=130; g=100; b= 45; }   // dirt median
+                else if (tl >= LANES - 2)    { r= 80; g= 25; b= 10; }   // enemy zone
+                else                         { r=145; g=110; b= 48; }   // open sand
+            } else if (_current_level == 3) {
+                if      (tl <= 1)            { r= 25; g= 20; b= 35; }   // dark safe zone
+                else if (tl == 4 || tl == 6) { r= 18; g= 15; b= 25; }   // dark road
+                else if (tl == 5)            { r= 30; g= 20; b= 40; }   // dark median
+                else if (tl >= LANES - 2)    { r= 50; g=  5; b=  5; }   // enemy zone
+                else                         { r= 22; g= 18; b= 30; }   // open dark
+            } else {
+                if      (tl <= 1)            { r=  8; g= 15; b= 35; }   // space safe zone
+                else if (tl == 4 || tl == 6) { r= 12; g= 10; b= 20; }   // space road
+                else if (tl == 5)            { r= 15; g= 12; b= 28; }   // space median
+                else if (tl >= LANES - 2)    { r= 35; g=  5; b= 50; }   // enemy zone (purple)
+                else                         { r=  6; g= 10; b= 25; }   // open space
+            }
 
-            SDL_FRect src = {0.f, srcY,         imgW,          (float)WIN_H};
-            SDL_FRect dst = {0.f, 0.f,  (float)WIN_W,  (float)WIN_H};
-            SDL_RenderTexture(ren, bg_texture, &src, &dst);
-        } else {
-            SDL_SetRenderDrawColor(ren, 10, 20, 10, 255);
-            SDL_FRect full = {0.f, 0.f, (float)WIN_W, (float)WIN_H};
-            SDL_RenderFillRect(ren, &full);
+            SDL_SetRenderDrawColor(ren, r, g, b, 255);
+            SDL_FRect band = {0.f, screen_y_top, (float)WIN_W, (float)TILE + 1.f};
+            SDL_RenderFillRect(ren, &band);
         }
 
-        // Level 4 role-reversal: dark overlay + star field to signal the twist
+        // ── Road centre-line dashes on road lanes ─────────────────────────────────
+        if      (_current_level == 1) SDL_SetRenderDrawColor(ren, 180, 160,  30, 255);
+        else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 120, 100,  30, 255);
+        else if (_current_level == 3) SDL_SetRenderDrawColor(ren,  60,  40,  80, 255);
+        else                          SDL_SetRenderDrawColor(ren,  40,  60, 120, 255);
+        for (int lane = -2; lane < LANES + 35; lane++) {
+            const int tl = ((lane % LANES) + LANES) % LANES;
+            if (tl != 4 && tl != 6) continue;
+            const float worldCY  = WIN_H - lane * TILE - TILE / 2.f;
+            const float screenCY = worldCY + _camera_scroll;
+            if (screenCY < -(float)TILE || screenCY > (float)WIN_H + TILE) continue;
+            for (float cx = 0.f; cx < WIN_W; cx += 40.f) {
+                SDL_FRect dash = {cx, screenCY - 3.f, 24.f, 6.f};
+                SDL_RenderFillRect(ren, &dash);
+            }
+        }
+
+        // ── Lane divider lines ────────────────────────────────────────────────────
+        if      (_current_level == 1) SDL_SetRenderDrawColor(ren,  55,  55,  55, 255);
+        else if (_current_level == 2) SDL_SetRenderDrawColor(ren, 100,  80,  40, 255);
+        else if (_current_level == 3) SDL_SetRenderDrawColor(ren,  40,  30,  55, 255);
+        else                          SDL_SetRenderDrawColor(ren,  20,  30,  60, 255);
+        for (int lane = -1; lane <= LANES + 35; lane++) {
+            const float worldY  = WIN_H - lane * TILE;
+            const float screenY = worldY + _camera_scroll;
+            if (screenY < -(float)TILE || screenY > (float)WIN_H + TILE) continue;
+            SDL_RenderLine(ren, 0.f, screenY, (float)WIN_W, screenY);
+        }
+
+        // ── Level 4: scatter stars in screen space ────────────────────────────────
         if (_current_level == 4) {
-            SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(ren, 0, 0, 10, 170);
-            SDL_FRect full = {0.f, 0.f, (float)WIN_W, (float)WIN_H};
-            SDL_RenderFillRect(ren, &full);
-            SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
             SDL_SetRenderDrawColor(ren, 150, 180, 255, 255);
             for (int i = 0; i < 60; i++) {
                 float sx = (float)((i * 137 + 23) % WIN_W);

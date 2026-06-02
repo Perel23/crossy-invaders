@@ -153,8 +153,22 @@
 
 ---
 
-## Upcoming steps
+---
+
+### ✅ Step 15 — Background, straight movement, camera, vehicle layout (2026-05-28)
+
+1. **Background image** — `res/background.png` loaded and rendered behind all entities
+2. **Straight movement** — removed diagonal shear (`TILT = 0.0f`) and perspective squash (`ISO_SCALE = 1.0f`) for clean top-down view
+3. **Camera movement** — camera scrolls to track player world-Y; entities drawn at `world_pos - camera_offset`
+4. **Vehicle / hazard layout** — adjusted hazard spawn positions and wrapping to suit new coordinate system
+5. **Level flow fixes** — level transition timing and state resets improved
+
+---
+
+## Upcoming steps (optional extras)
 
 | # | Step | Summary |
 |---|------|---------|
-| 12 | Sound & final polish | SDL_mixer SFX, high-score, damage flash, sprite select screen |
+| 16 | Sound effects | Add real WAV/OGG sfx for shoot, hit, die, level-clear via SDL3 audio |
+| 17 | Leaderboard screen | Show top-5 scores from file on game-over screen |
+| 18 | More sprites | Replace placeholder rectangles for bullets, pickups, hazards |
