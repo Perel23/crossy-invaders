@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 using namespace std;
 using namespace bagel;
 
@@ -27,6 +28,9 @@ namespace ci
     Game::Game()
     {
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) { cout << SDL_GetError() << endl; return; }
+        // Change CWD to the binary's directory so "res/..." paths work regardless of
+        // where the binary was launched from.
+        { const char* bp = SDL_GetBasePath(); if (bp) { chdir(bp); } }
         if (!SDL_CreateWindowAndRenderer("Crossy Invaders", WIN_W, WIN_H, 0, &win, &ren)) {
             cout << SDL_GetError() << endl; return;
         }
@@ -1741,6 +1745,7 @@ namespace ci
                 return ya < yb;
             });
 
+        SDL_SetRenderScale(ren, 1.f, 1.f); // ensure clean scale before entity rendering
         for (Entity e : drawList) {
             // FloatingText pop-ups
             if (e.test(ftMask)) {
