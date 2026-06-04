@@ -19,9 +19,9 @@ namespace ci
     static constexpr float HOP_HEIGHT      = 18.f;   // max pixel rise during player hop
     static constexpr float TILT            = 0.0f;   // flat top-down: no diagonal shear
 
-    // Difficulty speed multipliers: Easy = slower enemies, Hard = faster
-    static float diff_move_mult (int d) { return d == 0 ? 1.5f : d == 2 ? 0.70f : 1.0f; }
-    static float diff_shoot_mult(int d) { return d == 0 ? 1.6f : d == 2 ? 0.65f : 1.0f; }
+    // Unified world-speed multiplier: Easy = 0.82×, Normal = 1.0×, Hard = 1.18×
+    // Applied to enemy movement, shooting, hazard movement, and bullet speed.
+    static float diff_base_scale(int d) { return d == 0 ? 0.82f : d == 2 ? 1.18f : 1.0f; }
 
     // ─────────────────────────────── Constructor / Destructor ────────────────────
     Game::Game()
@@ -221,12 +221,14 @@ namespace ci
 
         // ── Global state entities ──
         Entity::create().addAll(Transform{{0.f, 0.f}, 0.f}, FormationState{1, 0, 0});
+        const float baseScale = diff_base_scale(_difficulty);
         Entity::create().addAll(
             Transform{{0.f, 0.f}, 0.f},
             GameStatus{false, false, false, 0, 0, 0, SDL_GetTicks(), 0},
             ScreenShake{0},
             ComboState{0, 0, 1},
-            SlowMo{0, 0});
+            SlowMo{0, 0},
+            SpeedScale{baseScale, baseScale});
 
         // Camera
         _camera_scroll      = 0.f;
@@ -1166,12 +1168,11 @@ namespace ci
     {
         static const Mask mask    = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Transform>().set<Drawable>().build();
         static const Mask fsMask  = MaskBuilder().set<FormationState>().build();
-        static const Mask smMask  = MaskBuilder().set<SlowMo>().build();
+        static const Mask ssMask  = MaskBuilder().set<SpeedScale>().build();
 
-        // Check slow-mo state
-        bool slowMoActive = false;
+        float speedScale = 1.0f;
         for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(smMask)) { slowMoActive = (e.get<SlowMo>().frames > 0); break; }
+            if (e.test(ssMask)) { speedScale = e.get<SpeedScale>().active; break; }
 
         // ── Level 2: independent per-enemy random movement ──
         if (_current_level == 2) {
@@ -1188,8 +1189,7 @@ namespace ci
                 lp.col += dir;
                 lp.col  = clamp(lp.col, 0, COLS - 1);
                 t.p.x   = TILE / 2.f + lp.col * TILE;
-                Uint64 interval = 200 + (Uint64)(std::rand() % 500);
-                if (slowMoActive) interval = (Uint64)(interval * 3.0f);
+                Uint64 interval = (Uint64)((200 + std::rand() % 500) / speedScale);
                 im.nextMove = now + interval;
             }
             return;
@@ -1202,7 +1202,7 @@ namespace ci
         auto& fs = fsEnt.get<FormationState>();
 
         const Uint64 now = SDL_GetTicks();
-        Uint64 move_ms = (Uint64)(ENEMY_MOVE_MS * diff_move_mult(_difficulty));
+        Uint64 move_ms = (Uint64)(ENEMY_MOVE_MS / speedScale);
         if (_current_level == 3) move_ms = (Uint64)(move_ms * 0.5f);
         if (_current_level == 4) move_ms = (Uint64)(move_ms * 0.8f);
 
@@ -1214,7 +1214,6 @@ namespace ci
             move_ms = (Uint64)(move_ms * std::max(0.3f, (float)remaining / _wave_enemy_count));
         }
 
-        if (slowMoActive) move_ms = (Uint64)(move_ms * 3.0f);
         if (now - fs.moveTimer < move_ms) return;
         fs.moveTimer = now;
 
@@ -1312,7 +1311,13 @@ namespace ci
         auto& fs = fsEnt.get<FormationState>();
 
         const Uint64 now = SDL_GetTicks();
-        Uint64 shoot_ms = (Uint64)(ENEMY_SHOOT_MS * diff_shoot_mult(_difficulty));
+        // Read SpeedScale for unified difficulty + SlowMo speed control
+        static const Mask ssMask2 = MaskBuilder().set<SpeedScale>().build();
+        float shootSpeedScale = 1.0f;
+        for (Entity e = Entity::first(); !e.eof(); e.next())
+            if (e.test(ssMask2)) { shootSpeedScale = e.get<SpeedScale>().active; break; }
+
+        Uint64 shoot_ms = (Uint64)(ENEMY_SHOOT_MS / shootSpeedScale);
         if (_current_level == 2) shoot_ms = (Uint64)(shoot_ms * 0.67f);
         if (_current_level == 3) shoot_ms = (Uint64)(shoot_ms * 0.33f);
         if (_current_level == 4) shoot_ms = (Uint64)(shoot_ms * 0.75f);
@@ -1358,18 +1363,18 @@ namespace ci
     void Game::bullet_system() const
     {
         static const Mask mask   = MaskBuilder().set<BulletTag>().set<Transform>().set<Velocity>().build();
-        static const Mask smMask = MaskBuilder().set<SlowMo>().build();
+        static const Mask ssMask = MaskBuilder().set<SpeedScale>().build();
 
-        float slowFactor = 1.0f;
+        float speedScale = 1.0f;
         for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(smMask)) { if (e.get<SlowMo>().frames > 0) slowFactor = 0.35f; break; }
+            if (e.test(ssMask)) { speedScale = e.get<SpeedScale>().active; break; }
 
         for (Entity e = Entity::first(); !e.eof(); e.next()) {
             if (!e.test(mask)) continue;
             auto& t         = e.get<Transform>();
             const auto& v   = e.get<Velocity>();
             const bool fromPl = e.get<BulletTag>().fromPlayer;
-            const float sf  = fromPl ? 1.0f : slowFactor;
+            const float sf  = fromPl ? 1.0f : speedScale;
             t.p.x += v.dx * sf;
             t.p.y += v.dy * sf;
             const float screenY = t.p.y + _camera_scroll + (t.p.x - WIN_W * 0.5f) * TILT;
@@ -1380,13 +1385,19 @@ namespace ci
 
     void Game::hazard_move_system() const
     {
-        static const Mask mask = MaskBuilder().set<Hazard>().set<Transform>().set<Drawable>().set<Velocity>().build();
+        static const Mask mask   = MaskBuilder().set<Hazard>().set<Transform>().set<Drawable>().set<Velocity>().build();
+        static const Mask ssMask = MaskBuilder().set<SpeedScale>().build();
+
+        float speedScale = 1.0f;
+        for (Entity e = Entity::first(); !e.eof(); e.next())
+            if (e.test(ssMask)) { speedScale = e.get<SpeedScale>().active; break; }
+
         for (Entity e = Entity::first(); !e.eof(); e.next()) {
             if (!e.test(mask)) continue;
             auto& t        = e.get<Transform>();
             const float dx = e.get<Velocity>().dx;
             const float hw = e.get<Drawable>().size.x / 2.f;
-            t.p.x += dx;
+            t.p.x += dx * speedScale;
             if (t.p.x - hw >  WIN_W) t.p.x = -hw;
             if (t.p.x + hw <  0)     t.p.x =  WIN_W + hw;
             const float screenY = t.p.y + _camera_scroll + (t.p.x - WIN_W * 0.5f) * TILT;
@@ -1421,7 +1432,7 @@ namespace ci
             // Dash cooldown countdown
             if (e.has<DashState>() && e.get<DashState>().cooldown > 0) e.get<DashState>().cooldown--;
 
-            // Bullet-time (SlowMo) activation
+            // Bullet-time (SlowMo) activation + SpeedScale update
             for (Entity sm = Entity::first(); !sm.eof(); sm.next()) {
                 if (!sm.test(smMask)) continue;
                 auto& smc = sm.get<SlowMo>();
@@ -1435,6 +1446,10 @@ namespace ci
                 } else if (!s.slowmo) {
                     s.slowmoFired = false;
                 }
+                // Keep SpeedScale.active in sync: dramatic override while Q is active,
+                // otherwise restore the difficulty baseline.
+                auto& ss = sm.get<SpeedScale>();
+                ss.active = (smc.frames > 0) ? 0.35f : ss.base;
                 break;
             }
             break; // one player
