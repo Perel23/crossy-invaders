@@ -25,6 +25,7 @@ namespace ci
 	using SelectState  = struct { int selected; bool moved; int difficulty; };  // difficulty: 0=Easy 1=Normal 2=Hard
 	using LevelSplash  = struct { int framesLeft; };
 	using DamageFlash  = struct { int frames; };
+	using ShieldFlash  = struct { int frames; };
 	using ScreenShake  = struct { int frames; };
 	using Explosion    = struct { int frames; int maxFrames; float startSize; };
 	using Pickup       = struct { int type; };    // 0=rapid-fire  1=+shield  2=+health
@@ -80,6 +81,9 @@ template <> struct bagel::Storage<ci::LevelSplash> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::DamageFlash> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::DamageFlash>;
+};
+template <> struct bagel::Storage<ci::ShieldFlash> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::ShieldFlash>;
 };
 template <> struct bagel::Storage<ci::ScreenShake> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::ScreenShake>;

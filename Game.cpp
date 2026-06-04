@@ -145,6 +145,7 @@ namespace ci
             Shield{0.f, SHIELD_CHARGES},
             Invincibility{0},
             DamageFlash{0},
+            ShieldFlash{0},
             RapidFire{0, 0},
             DashState{0},
             SpreadShot{0},
@@ -950,6 +951,22 @@ namespace ci
             SDL_RenderTexture(ren, bibi_select_tex, nullptr, &bd);
         }
 
+        // Hair-in-wind: a small coloured wisp drawn above each portrait that
+        // oscillates left/right using _select_scroll as the time source.
+        const float hairWind = std::sin(_select_scroll * 0.04f) * 6.f;
+        constexpr float HAIR_W = 52.f, HAIR_H = 10.f;
+        const float hairY = BOX_Y + 28.f;   // just above the header strip bottom
+        // Trump — signature golden/blond tuft
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(ren, 240, 185, 30, 200);
+        SDL_FRect trumpHair = {TRUMP_X + (BOX_W - HAIR_W) / 2.f + hairWind, hairY, HAIR_W, HAIR_H};
+        SDL_RenderFillRect(ren, &trumpHair);
+        // Bibi — dark grey hair fringe
+        SDL_SetRenderDrawColor(ren, 45, 40, 38, 200);
+        SDL_FRect bibiHair = {BIBI_X + (BOX_W - HAIR_W) / 2.f - hairWind, hairY, HAIR_W, HAIR_H};
+        SDL_RenderFillRect(ren, &bibiHair);
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+
         // ← → hint — 12px below box bottom (BOX bottom = 92+310 = 402)
         // "<  LEFT/RIGHT  >" = 16 chars × 8 × 1.2 = 153px; centre x=(1024-153)/2=435; canvas=362
         SDL_SetRenderScale(ren, 1.2f, 1.2f);
@@ -1420,11 +1437,17 @@ namespace ci
 
             // Shield (Iron Dome)
             if (s.activate && !s.activateFired && sh.charges > 0 && sh.timer <= 0.f) {
-                sh.timer = SHIELD_DURATION; sh.charges--; s.activateFired = true;
+                sh.timer = SHIELD_DURATION; sh.charges--;
+                s.activateFired = true;
+                // Trigger flash on the icon slot that just disappeared
+                if (e.has<ShieldFlash>()) e.get<ShieldFlash>().frames = 45;
             } else if (!s.activate) {
                 s.activateFired = false;
             }
             if (sh.timer > 0.f) sh.timer -= 1.f;
+
+            // ShieldFlash countdown
+            if (e.has<ShieldFlash>() && e.get<ShieldFlash>().frames > 0) e.get<ShieldFlash>().frames--;
 
             // SpreadShot countdown
             if (e.has<SpreadShot>() && e.get<SpreadShot>().frames > 0) e.get<SpreadShot>().frames--;
@@ -1783,7 +1806,21 @@ namespace ci
             }
             const float tiltOff = (screenX - WIN_W * 0.5f) * TILT;
             const float sqH = d.size.y * ISO_SCALE;
-            SDL_FRect dest = {screenX - d.size.x/2 - hopOffX, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY, d.size.x, sqH};
+
+            // Breathing / idle animation — sine bob applied to player and enemies
+            const float tickSec = (float)SDL_GetTicks() * 0.005f;
+            float breatheY = 0.f;
+            if (e.test(playerMask) && hopOffY == 0.f) {
+                // Player: breathes when still, hop takes over when moving
+                breatheY = std::sin(tickSec) * 2.5f;
+            } else if (e.has<LanePos>() && (e.test(enemyMask) || e.test(bossMask))) {
+                // Each enemy gets a unique phase from its grid position → organic, unsynchronised
+                const int col  = e.get<LanePos>().col;
+                const int lane = e.get<LanePos>().lane;
+                breatheY = std::sin(tickSec + col * 1.3f + lane * 0.7f) * 2.f;
+            }
+
+            SDL_FRect dest = {screenX - d.size.x/2 - hopOffX, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY - breatheY, d.size.x, sqH};
 
             // Iron Dome shield halo
             if (e.test(playerMask) && e.get<Shield>().timer > 0.f) {
@@ -1829,7 +1866,9 @@ namespace ci
             } else if (e.test(hazardVisMsk)) {
                 const int idx = e.get<HazardVisual>().tex_index;
                 const float cx = screenX;
-                const float cy = t.p.y + _camera_scroll + tiltOff;
+                // Driving-over-bumps wobble: fast sine, phase offset per horizontal position
+                const float wobble = std::sin((float)SDL_GetTicks() * 0.015f + screenX * 0.015f) * 1.5f;
+                const float cy = t.p.y + _camera_scroll + tiltOff - wobble;
                 const float hw = d.size.x * 0.5f;
                 const float hh = sqH * 0.5f;
                 const float sh = hw * TILT;
@@ -1950,9 +1989,21 @@ namespace ci
                 const float cw = tw/3.f, ch = th/3.f;
                 const SDL_FRect srcFull  = {0.f, 0.f, cw, ch};
                 const SDL_FRect srcEmpty = {2.f*cw, ch, cw, ch};
+                const int dfFrames = e.has<DamageFlash>() ? e.get<DamageFlash>().frames : 0;
                 for (int i = 0; i < 3; i++) {
                     const SDL_FRect dst = {8.f + i*30.f, 6.f, 26.f, 26.f};
-                    SDL_RenderTexture(ren, hearts_texture, i < hp ? &srcFull : &srcEmpty, &dst);
+                    // Flash the just-lost slot: blink it on/off while DamageFlash is active
+                    if (i == hp && dfFrames > 0) {
+                        if ((dfFrames / 4) % 2 == 0) {
+                            SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                            SDL_SetTextureAlphaMod(hearts_texture, 200);
+                            SDL_RenderTexture(ren, hearts_texture, &srcFull, &dst);
+                            SDL_SetTextureAlphaMod(hearts_texture, 255);
+                            SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+                        }
+                    } else {
+                        SDL_RenderTexture(ren, hearts_texture, i < hp ? &srcFull : &srcEmpty, &dst);
+                    }
                 }
             } else {
                 for (int i = 0; i < 5; i++) {
@@ -1961,11 +2012,15 @@ namespace ci
                     SDL_RenderFillRect(ren, &icon);
                 }
             }
+            const int sfFrames = e.has<ShieldFlash>() ? e.get<ShieldFlash>().frames : 0;
             for (int i = 0; i < 3; i++) {
                 const bool avail = (i < sh.charges) || (i == 0 && sh.timer > 0.f);
                 const SDL_FRect icon = {150.f + i*32.f, 4.f, 28.f, 25.f};
+                // Flash the just-used slot before it goes dark
+                const bool flashing = (sfFrames > 0 && i == sh.charges && !avail);
                 if (iron_dome_icon_texture) {
-                    SDL_SetTextureAlphaMod(iron_dome_icon_texture, avail ? 255 : 60);
+                    Uint8 alpha = avail ? 255 : (flashing && (sfFrames / 4) % 2 == 0 ? 220 : 60);
+                    SDL_SetTextureAlphaMod(iron_dome_icon_texture, alpha);
                     SDL_RenderTexture(ren, iron_dome_icon_texture, nullptr, &icon);
                     SDL_SetTextureAlphaMod(iron_dome_icon_texture, 255);
                 } else {
@@ -2064,13 +2119,39 @@ namespace ci
             }
         }
 
-        // Level + score
+        // Global status text + score
+        // Shows active powerup name (coloured) or falls back to "LVL X"
         {
-            SDL_SetRenderScale(ren, 2.f, 2.f);
-            SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
+            static const Mask pStatusMask = MaskBuilder().set<PlayerTag>().set<RapidFire>().set<SpreadShot>().build();
+            static const Mask smStatusMask = MaskBuilder().set<SlowMo>().build();
+
+            const char* statusTxt = nullptr;
+            Uint8 sr = 200, sg = 200, sb = 200;
+            for (Entity e = Entity::first(); !e.eof(); e.next()) {
+                if (!e.test(pStatusMask)) continue;
+                if (e.get<RapidFire>().frames > 0)                           { statusTxt = "RAPIDFIRE";  sr=255; sg=220; sb=30;  break; }
+                if (e.has<SpreadShot>() && e.get<SpreadShot>().frames > 0)   { statusTxt = "SPREADSHOT"; sr=160; sg=60;  sb=255; break; }
+                break;
+            }
+            if (!statusTxt) {
+                for (Entity e = Entity::first(); !e.eof(); e.next()) {
+                    if (!e.test(smStatusMask)) continue;
+                    if (e.get<SlowMo>().frames > 0) { statusTxt = "SLOW-MO"; sr=80; sg=160; sb=255; }
+                    break;
+                }
+            }
+
             char buf[48];
-            SDL_snprintf(buf, sizeof(buf), "LVL %d", _current_level);
-            SDL_RenderDebugText(ren, 5.f, 20.f, buf);
+            SDL_SetRenderScale(ren, 2.f, 2.f);
+            if (statusTxt) {
+                SDL_SetRenderDrawColor(ren, sr, sg, sb, 255);
+                SDL_RenderDebugText(ren, 5.f, 20.f, statusTxt);
+            } else {
+                SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
+                SDL_snprintf(buf, sizeof(buf), "LVL %d", _current_level);
+                SDL_RenderDebugText(ren, 5.f, 20.f, buf);
+            }
+            SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
             SDL_snprintf(buf, sizeof(buf), "SCORE %05d", _score);
             SDL_RenderDebugText(ren, 216.f, 5.f, buf);
             SDL_SetRenderScale(ren, 1.f, 1.f);
