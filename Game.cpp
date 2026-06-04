@@ -979,21 +979,44 @@ namespace ci
             SDL_RenderTexture(ren, bibi_select_tex, nullptr, &bd);
         }
 
-        // Hair-in-wind: a small coloured wisp drawn above each portrait that
-        // oscillates left/right using _select_scroll as the time source.
-        const float hairWind = std::sin(_select_scroll * 0.04f) * 6.f;
-        constexpr float HAIR_W = 52.f, HAIR_H = 10.f;
-        const float hairY = BOX_Y + 28.f;   // just above the header strip bottom
-        // Trump — signature golden/blond tuft
-        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(ren, 240, 185, 30, 200);
-        SDL_FRect trumpHair = {TRUMP_X + (BOX_W - HAIR_W) / 2.f + hairWind, hairY, HAIR_W, HAIR_H};
-        SDL_RenderFillRect(ren, &trumpHair);
-        // Bibi — dark grey hair fringe
-        SDL_SetRenderDrawColor(ren, 45, 40, 38, 200);
-        SDL_FRect bibiHair = {BIBI_X + (BOX_W - HAIR_W) / 2.f - hairWind, hairY, HAIR_W, HAIR_H};
-        SDL_RenderFillRect(ren, &bibiHair);
-        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+        // Shine sweep: a semi-transparent white stripe that glides across each
+        // portrait every ~4 seconds, like light reflecting off the character.
+        // _select_scroll increments 0.5/frame → period = 480 increments = ~16 s total,
+        // but we run a shine every 240 increments (~8 s) using fmod.
+        {
+            constexpr float PERIOD  = 240.f;   // scroll units per shine cycle
+            constexpr float SHINE_W = 28.f;    // width of the streak
+            const float portX = TRUMP_X + IMG_PAD;
+            const float portW = BOX_W - IMG_PAD * 2.f;
+            const float portY = BOX_Y + 32.f;
+
+            // t in [0,1] over the period; shine crosses the portrait when t in [0, 1]
+            const float t = std::fmod(_select_scroll, PERIOD) / PERIOD;
+            // x goes from (portX - SHINE_W) to (portX + portW), clamped to portrait
+            const float rawX = portX - SHINE_W + t * (portW + SHINE_W * 2.f);
+            // Alpha bell: peak at centre of sweep, zero at edges
+            const float alpha = std::sin(t * (float)M_PI) * 110.f;
+            if (alpha > 2.f) {
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(ren, 255, 255, 240, (Uint8)alpha);
+                // Trump shine
+                const float tx = std::max(portX, std::min(rawX, portX + portW - SHINE_W));
+                SDL_FRect tShine = {tx, portY, SHINE_W, IMG_H};
+                SDL_RenderFillRect(ren, &tShine);
+                // Bibi shine — offset half a period so they don't shine simultaneously
+                const float bt = std::fmod(_select_scroll + PERIOD * 0.5f, PERIOD) / PERIOD;
+                const float bRawX = (BIBI_X + IMG_PAD) - SHINE_W + bt * (portW + SHINE_W * 2.f);
+                const float bAlpha = std::sin(bt * (float)M_PI) * 110.f;
+                if (bAlpha > 2.f) {
+                    SDL_SetRenderDrawColor(ren, 255, 255, 240, (Uint8)bAlpha);
+                    const float bx = std::max(BIBI_X + IMG_PAD,
+                                              std::min(bRawX, BIBI_X + IMG_PAD + portW - SHINE_W));
+                    SDL_FRect bShine = {bx, portY, SHINE_W, IMG_H};
+                    SDL_RenderFillRect(ren, &bShine);
+                }
+                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+            }
+        }
 
         // ← → hint — 12px below box bottom (BOX bottom = 92+310 = 402)
         // "<  LEFT/RIGHT  >" = 16 chars × 8 × 1.2 = 153px; centre x=(1024-153)/2=435; canvas=362
