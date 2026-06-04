@@ -57,6 +57,7 @@ namespace ci
 		void floating_text_system() const;
 		void sound_system() const;
 		void hop_system() const;
+		void animate_system() const;
 		void play_sfx(int type) const;
 		void load_high_score();
 		void save_high_score() const;

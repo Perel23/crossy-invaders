@@ -149,7 +149,8 @@ namespace ci
             RapidFire{0, 0},
             DashState{0},
             SpreadShot{0},
-            HopState{0, 10, 0.f});
+            HopState{0, 10, 0.f},
+            BreatheState{0.f, 0.05f, 2.5f});
 
         // ── Enemies ──
         if (_current_level == 3) {
@@ -157,17 +158,20 @@ namespace ci
                 Transform{{TILE / 2.f + (COLS / 2) * TILE, WIN_H - TILE / 2.f - ENEMY_TOP_LANE * TILE}, 0.f},
                 Drawable{{0, 0, 0, 0}, {TILE * 3.f, TILE * 3.f}},
                 LanePos{ENEMY_TOP_LANE, COLS / 2},
-                EnemyTag{}, BossTag{}, Health{BOSS_HP});
+                EnemyTag{}, BossTag{}, Health{BOSS_HP},
+                BreatheState{0.f, 0.04f, 3.f});
         } else if (_current_level == 4) {
-            // Level 4 role-reversal: enemies at the BOTTOM (lanes 2-3)
             for (int row = 0; row < ENEMY_ROWS; row++) {
                 for (int col = 0; col < ENEMY_COLS; col++) {
                     const int lane = 2 + row;
                     const int ecol = ENEMY_START_COL + col;
+                    // Unique starting phase per enemy so they breathe out of sync
+                    const float phase = (col * 13 + row * 7) % 100 * 0.063f;
                     Entity::create().addAll(
                         Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
                         Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
-                        LanePos{lane, ecol}, EnemyTag{}, Health{3});
+                        LanePos{lane, ecol}, EnemyTag{}, Health{3},
+                        BreatheState{phase, 0.05f, 2.f});
                 }
             }
         } else {
@@ -176,17 +180,20 @@ namespace ci
                 for (int col = 0; col < ENEMY_COLS; col++) {
                     const int lane = ENEMY_TOP_LANE - row;
                     const int ecol = ENEMY_START_COL + col;
+                    const float phase = (col * 13 + row * 7) % 100 * 0.063f;
                     if (_current_level == 2) {
                         Entity::create().addAll(
                             Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
                             Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
                             LanePos{lane, ecol}, EnemyTag{}, Health{2},
-                            IndividualMove{SDL_GetTicks() + (Uint64)(std::rand() % 500)});
+                            IndividualMove{SDL_GetTicks() + (Uint64)(std::rand() % 500)},
+                            BreatheState{phase, 0.05f, 2.f});
                     } else {
                         Entity::create().addAll(
                             Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
                             Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
-                            LanePos{lane, ecol}, EnemyTag{}, Health{1});
+                            LanePos{lane, ecol}, EnemyTag{}, Health{1},
+                            BreatheState{phase, 0.05f, 2.f});
                     }
                 }
             }
@@ -213,10 +220,12 @@ namespace ci
         for (const auto& def : hdefs) {
             const float y = WIN_H - TILE / 2.f - def.lane * TILE;
             for (int k = 0; k < 2; k++) {
+                const float initPhase = (float)(std::rand() % 628) * 0.01f; // 0..2π
                 Entity::create().addAll(
                     Transform{{(float)(std::rand() % WIN_W), y}, 0.f},
                     Drawable{{0, 0, 0, 0}, {HAZARD_W, HAZARD_H}},
-                    Velocity{def.dx, 0.f}, Hazard{}, HazardVisual{def.tex});
+                    Velocity{def.dx, 0.f}, Hazard{}, HazardVisual{def.tex},
+                    BreatheState{initPhase, 0.15f, 1.5f});
             }
         }
 
@@ -476,6 +485,21 @@ namespace ci
         for (Entity e = Entity::first(); !e.eof(); e.next()) {
             if (!e.test(mask)) continue;
             if (e.get<HopState>().frames > 0) e.get<HopState>().frames--;
+        }
+    }
+
+    void Game::animate_system() const
+    {
+        // Increments BreatheState.phase on every entity that has one.
+        // draw_system reads phase to compute a sin-based Y offset — no SDL_GetTicks()
+        // or wall-clock reads in the render path; all animation state lives in ECS.
+        static const Mask mask = MaskBuilder().set<BreatheState>().build();
+        constexpr float TWO_PI = 6.28318530f;
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(mask)) continue;
+            auto& bs = e.get<BreatheState>();
+            bs.phase += bs.speed;
+            if (bs.phase >= TWO_PI) bs.phase -= TWO_PI; // keep in [0, 2π) to avoid float drift
         }
     }
 
@@ -1807,17 +1831,14 @@ namespace ci
             const float tiltOff = (screenX - WIN_W * 0.5f) * TILT;
             const float sqH = d.size.y * ISO_SCALE;
 
-            // Breathing / idle animation — sine bob applied to player and enemies
-            const float tickSec = (float)SDL_GetTicks() * 0.005f;
+            // Breathing / wobble animation — driven entirely by BreatheState component.
+            // animate_system() increments phase each frame; draw_system only reads it.
             float breatheY = 0.f;
-            if (e.test(playerMask) && hopOffY == 0.f) {
-                // Player: breathes when still, hop takes over when moving
-                breatheY = std::sin(tickSec) * 2.5f;
-            } else if (e.has<LanePos>() && (e.test(enemyMask) || e.test(bossMask))) {
-                // Each enemy gets a unique phase from its grid position → organic, unsynchronised
-                const int col  = e.get<LanePos>().col;
-                const int lane = e.get<LanePos>().lane;
-                breatheY = std::sin(tickSec + col * 1.3f + lane * 0.7f) * 2.f;
+            if (e.has<BreatheState>()) {
+                const auto& bs = e.get<BreatheState>();
+                breatheY = std::sin(bs.phase) * bs.amplitude;
+                // Hop takes over vertical position while the player is mid-air
+                if (hopOffY > 0.f) breatheY = 0.f;
             }
 
             SDL_FRect dest = {screenX - d.size.x/2 - hopOffX, t.p.y - sqH/2 + _camera_scroll + tiltOff - hopOffY - breatheY, d.size.x, sqH};
@@ -1840,15 +1861,19 @@ namespace ci
             }
 
             if (e.test(playerMask)) {
-                // Low-HP red tint
-                const int hp = e.has<Health>() ? e.get<Health>().hp : 3;
-                if (player_texture) {
-                    if (hp == 1) SDL_SetTextureColorMod(player_texture, 255, 80, 80);
-                    SDL_RenderTexture(ren, player_texture, nullptr, &dest);
-                    if (hp == 1) SDL_SetTextureColorMod(player_texture, 255, 255, 255);
-                } else {
-                    SDL_SetRenderDrawColor(ren, hp == 1 ? 255 : 220, hp == 1 ? 60 : 200, 50, 255);
-                    SDL_RenderFillRect(ren, &dest);
+                const int hp       = e.has<Health>()      ? e.get<Health>().hp      : 3;
+                const int dfFrames = e.has<DamageFlash>() ? e.get<DamageFlash>().frames : 0;
+                // Sprite blinks every 3 frames while DamageFlash is active
+                const bool spriteOn = !(dfFrames > 0 && (dfFrames / 3) % 2 == 1);
+                if (spriteOn) {
+                    if (player_texture) {
+                        if (hp == 1) SDL_SetTextureColorMod(player_texture, 255, 80, 80);
+                        SDL_RenderTexture(ren, player_texture, nullptr, &dest);
+                        if (hp == 1) SDL_SetTextureColorMod(player_texture, 255, 255, 255);
+                    } else {
+                        SDL_SetRenderDrawColor(ren, hp == 1 ? 255 : 220, hp == 1 ? 60 : 200, 50, 255);
+                        SDL_RenderFillRect(ren, &dest);
+                    }
                 }
             } else if (e.test(bulletMask)) {
                 const bool fp = e.get<BulletTag>().fromPlayer;
@@ -1866,8 +1891,10 @@ namespace ci
             } else if (e.test(hazardVisMsk)) {
                 const int idx = e.get<HazardVisual>().tex_index;
                 const float cx = screenX;
-                // Driving-over-bumps wobble: fast sine, phase offset per horizontal position
-                const float wobble = std::sin((float)SDL_GetTicks() * 0.015f + screenX * 0.015f) * 1.5f;
+                // Driving-over-bumps wobble: read from BreatheState, updated by animate_system
+                const float wobble = e.has<BreatheState>()
+                    ? std::sin(e.get<BreatheState>().phase) * e.get<BreatheState>().amplitude
+                    : 0.f;
                 const float cy = t.p.y + _camera_scroll + tiltOff - wobble;
                 const float hw = d.size.x * 0.5f;
                 const float hh = sqH * 0.5f;
@@ -2432,6 +2459,7 @@ namespace ci
                     splash_system();
                     floating_text_system();
                     hop_system();
+                    animate_system();
 
                     // Camera scroll (disabled for level 4)
                     if (_current_level != 4) {
