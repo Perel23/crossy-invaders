@@ -1745,7 +1745,7 @@ namespace ci
                 return ya < yb;
             });
 
-        SDL_SetRenderScale(ren, 1.f, 1.f); // ensure clean scale before entity rendering
+        SDL_SetRenderScale(ren, 1.f, 1.f);
         for (Entity e : drawList) {
             // FloatingText pop-ups
             if (e.test(ftMask)) {

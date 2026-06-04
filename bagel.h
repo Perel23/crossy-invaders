@@ -187,7 +187,7 @@ namespace bagel
 	{
 	public:
 		using bit_type = mask_type;
-		static constexpr bit_type bit(const int idx) { return 1<<idx; }
+		static constexpr bit_type bit(const int idx) { return (bit_type)1<<idx; }
 
 		void set(const bit_type b) { _mask |= b; }
 
