@@ -154,7 +154,8 @@ namespace ci
             DashState{0},
             SpreadShot{0},
             HopState{0, 10, 0.f},
-            BreatheState{0.f, 0.05f, 2.5f});
+            BreatheState{0.f, 0.05f, 2.5f},
+            BlinkPhase{true, 0, 8});
 
         // ── Enemies ──
         if (_current_level == 3) {
@@ -504,6 +505,206 @@ namespace ci
             auto& bs = e.get<BreatheState>();
             bs.phase += bs.speed;
             if (bs.phase >= TWO_PI) bs.phase -= TWO_PI; // keep in [0, 2π) to avoid float drift
+        }
+    }
+
+    void Game::blink_system() const
+    {
+        static const Mask mask = MaskBuilder().set<BlinkPhase>().build();
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(mask)) continue;
+            auto& bp = e.get<BlinkPhase>();
+            if (++bp.counter >= bp.period) {
+                bp.counter  = 0;
+                bp.visible  = !bp.visible;
+            }
+        }
+    }
+
+    void Game::map_screen_system() const
+    {
+        static const Mask mask = MaskBuilder().set<MapScreen>().build();
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(mask)) continue;
+            auto& ms = e.get<MapScreen>();
+            // Advance plane over first 180 frames (~3 s), then it rests at destination
+            if (ms.planeT < 1.f)
+                ms.planeT = std::min(1.f, ms.planeT + 1.f / 180.f);
+            if (--ms.framesLeft <= 0) {
+                e.destroy();
+                // Now start the level splash and make the player invincible through it
+                const int splashFrames = (_current_level == 4 ? 300 : 150);
+                Entity::create().add(LevelSplash{splashFrames});
+                static const Mask plInvMask = MaskBuilder()
+                    .set<PlayerTag>().set<Invincibility>().build();
+                for (Entity p = Entity::first(); !p.eof(); p.next()) {
+                    if (!p.test(plInvMask)) continue;
+                    auto& inv = p.get<Invincibility>();
+                    if (inv.frames < splashFrames) inv.frames = splashFrames;
+                    break;
+                }
+                _state = GameState::Playing;
+            }
+            break;
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────
+    void Game::draw_map_screen() const
+    {
+        // Dark background
+        SDL_SetRenderDrawColor(ren, 12, 20, 40, 255);
+        SDL_FRect bg = {0, 0, (float)WIN_W, (float)WIN_H};
+        SDL_RenderFillRect(ren, &bg);
+
+        // Read selected character and MapScreen state
+        static const Mask ssMask = MaskBuilder().set<SelectState>().build();
+        int selected = 0;
+        for (Entity e = Entity::first(); !e.eof(); e.next())
+            if (e.test(ssMask)) { selected = e.get<SelectState>().selected; break; }
+
+        static const Mask msMask = MaskBuilder().set<MapScreen>().build();
+        float planeT = 1.f; int fromIdx = 0, toIdx = 0;
+        for (Entity e = Entity::first(); !e.eof(); e.next())
+            if (e.test(msMask)) {
+                const auto& ms = e.get<MapScreen>();
+                planeT = ms.planeT; fromIdx = ms.fromIdx; toIdx = ms.toIdx;
+                break;
+            }
+
+        struct WayPoint { float x, y; const char* name; };
+        const WayPoint trump_route[] = {
+            {120.f, 390.f, "WASHINGTON"},
+            {350.f, 270.f, "LONDON"},
+            {640.f, 340.f, "DUBAI"},
+            {890.f, 360.f, "TEHRAN"},
+        };
+        const WayPoint bibi_route[] = {
+            {130.f, 410.f, "JERUSALEM"},
+            {380.f, 385.f, "AMMAN"},
+            {630.f, 360.f, "BAGHDAD"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint* route    = (selected == 0) ? trump_route : bibi_route;
+        const char*     charName = (selected == 0) ? "TRUMP" : "BIBI";
+
+        // Helper: arc Y offset — sine curve so plane rises and falls between cities
+        auto arcY = [](float t) { return -std::sin(t * 3.14159f) * 90.f; };
+
+        // Title
+        SDL_SetRenderScale(ren, 3.f, 3.f);
+        SDL_SetRenderDrawColor(ren, 255, 220, 80, 255);
+        SDL_RenderDebugText(ren, (WIN_W / 2.f - 36.f) / 3.f, 38.f / 3.f, charName);
+        SDL_SetRenderScale(ren, 1.5f, 1.5f);
+        SDL_SetRenderDrawColor(ren, 140, 155, 185, 255);
+        SDL_RenderDebugText(ren, (WIN_W / 2.f - 100.f) / 1.5f, 72.f / 1.5f, "MISSION PROGRESS");
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Dim base route lines (all segments)
+        SDL_SetRenderDrawColor(ren, 45, 60, 90, 255);
+        for (int i = 0; i < 3; i++)
+            SDL_RenderLine(ren, (int)route[i].x, (int)route[i].y,
+                                (int)route[i+1].x, (int)route[i+1].y);
+
+        // Gold lines for already-completed segments
+        SDL_SetRenderDrawColor(ren, 180, 140, 50, 255);
+        for (int i = 0; i < fromIdx; i++)
+            SDL_RenderLine(ren, (int)route[i].x, (int)route[i].y,
+                                (int)route[i+1].x, (int)route[i+1].y);
+
+        // Draw the plane arc flight path (dashed dots between fromIdx and toIdx cities)
+        if (fromIdx != toIdx) {
+            const float fx = route[fromIdx].x, fy = route[fromIdx].y;
+            const float tx = route[toIdx].x,   ty = route[toIdx].y;
+            SDL_SetRenderDrawColor(ren, 100, 150, 220, 120);
+            const int steps = 40;
+            for (int s = 0; s <= steps; s++) {
+                const float st = (float)s / steps;
+                const float px = fx + (tx - fx) * st;
+                const float py = fy + (ty - fy) * st + arcY(st);
+                SDL_FRect dot = {px - 1.f, py - 1.f, 3.f, 3.f};
+                if (s % 2 == 0) SDL_RenderFillRect(ren, &dot); // dashed
+            }
+
+            // Plane trail (solid dots from 0 to planeT)
+            SDL_SetRenderDrawColor(ren, 120, 190, 255, 255);
+            const int trailSteps = (int)(planeT * steps);
+            for (int s = 0; s <= trailSteps; s++) {
+                const float st = (float)s / steps;
+                const float px = fx + (tx - fx) * st;
+                const float py = fy + (ty - fy) * st + arcY(st);
+                SDL_FRect dot = {px - 2.f, py - 2.f, 4.f, 4.f};
+                SDL_RenderFillRect(ren, &dot);
+            }
+
+            // Plane body at current position
+            const float px = fx + (tx - fx) * planeT;
+            const float py = fy + (ty - fy) * planeT + arcY(planeT);
+            // Angle of travel (approximate with next tiny step)
+            const float nt = std::min(planeT + 0.02f, 1.f);
+            const float nx = fx + (tx - fx) * nt;
+            const float ny = fy + (ty - fy) * nt + arcY(nt);
+            const float angle = std::atan2f(ny - py, nx - px);
+            const float ca = std::cosf(angle), sa = std::sinf(angle);
+            // Draw body as a small rotated rect (4 vertices via SDL_RenderGeometry)
+            constexpr float BW = 18.f, BH = 7.f;
+            SDL_Vertex verts[4];
+            auto makeVert = [&](float lx, float ly, Uint8 r, Uint8 g, Uint8 b) {
+                SDL_Vertex v;
+                v.position.x = px + lx * ca - ly * sa;
+                v.position.y = py + lx * sa + ly * ca;
+                v.color = {r / 255.f, g / 255.f, b / 255.f, 1.f};
+                v.tex_coord = {0.f, 0.f};
+                return v;
+            };
+            verts[0] = makeVert(-BW/2, -BH/2, 240, 240, 255);
+            verts[1] = makeVert( BW/2, -BH/2, 200, 220, 255);
+            verts[2] = makeVert( BW/2,  BH/2, 200, 220, 255);
+            verts[3] = makeVert(-BW/2,  BH/2, 240, 240, 255);
+            int idx[] = {0,1,2, 0,2,3};
+            SDL_RenderGeometry(ren, nullptr, verts, 4, idx, 6);
+            // Wing: thin bar perpendicular to travel
+            constexpr float WW = 14.f, WH = 4.f;
+            SDL_Vertex wing[4];
+            wing[0] = makeVert(-WW/2, -BH/2 - WH, 160, 200, 255);
+            wing[1] = makeVert( WW/2, -BH/2 - WH, 160, 200, 255);
+            wing[2] = makeVert( WW/2,  BH/2 + WH, 160, 200, 255);
+            wing[3] = makeVert(-WW/2,  BH/2 + WH, 160, 200, 255);
+            SDL_RenderGeometry(ren, nullptr, wing, 4, idx, 6);
+        }
+
+        // Waypoint dots
+        for (int i = 0; i < 4; i++) {
+            const bool visited = (i < toIdx) || (i == toIdx && planeT >= 1.f);
+            const bool isCurrent = (i == toIdx);
+            const float r = isCurrent ? 13.f : 8.f;
+
+            if (isCurrent && planeT >= 1.f)
+                SDL_SetRenderDrawColor(ren, 255, 200, 40, 255);   // gold: arrived
+            else if (visited)
+                SDL_SetRenderDrawColor(ren, 70, 200, 90, 255);    // green: passed
+            else if (i == fromIdx)
+                SDL_SetRenderDrawColor(ren, 150, 160, 180, 255);  // light: just left
+            else
+                SDL_SetRenderDrawColor(ren, 50, 60, 80, 255);     // dark: future
+
+            SDL_FRect dot = {route[i].x - r, route[i].y - r, r * 2.f, r * 2.f};
+            SDL_RenderFillRect(ren, &dot);
+
+            // City label
+            SDL_SetRenderScale(ren, 1.2f, 1.2f);
+            const bool bright = (visited || i == fromIdx);
+            SDL_SetRenderDrawColor(ren, bright ? 210 : 90, bright ? 210 : 90, bright ? 215 : 110, 255);
+            SDL_RenderDebugText(ren, (route[i].x - 28.f) / 1.2f, (route[i].y + 18.f) / 1.2f, route[i].name);
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
+
+        // Blinking "ENTER to skip" prompt
+        if ((SDL_GetTicks() / 500) % 2 == 0) {
+            SDL_SetRenderScale(ren, 1.5f, 1.5f);
+            SDL_SetRenderDrawColor(ren, 130, 130, 140, 255);
+            SDL_RenderDebugText(ren, (WIN_W / 2.f - 84.f) / 1.5f, (WIN_H - 52.f) / 1.5f, "SPACE to skip");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
         }
     }
 
@@ -2033,7 +2234,7 @@ namespace ci
         }
 
         // HUD: HP + Shield icons
-        static const Mask hpMask = MaskBuilder().set<PlayerTag>().set<Health>().set<Shield>().build();
+        static const Mask hpMask = MaskBuilder().set<PlayerTag>().set<Health>().set<Shield>().set<BlinkPhase>().build();
         for (Entity e = Entity::first(); !e.eof(); e.next()) {
             if (!e.test(hpMask)) continue;
             const int hp   = e.get<Health>().hp;
@@ -2067,14 +2268,17 @@ namespace ci
                     SDL_RenderFillRect(ren, &icon);
                 }
             }
+            const bool blinkOn = e.get<BlinkPhase>().visible;
             const int sfFrames = e.has<ShieldFlash>() ? e.get<ShieldFlash>().frames : 0;
             for (int i = 0; i < 3; i++) {
-                const bool avail = (i < sh.charges) || (i == 0 && sh.timer > 0.f);
+                const bool active = (i == 0 && sh.timer > 0.f);
+                const bool avail  = (i < sh.charges) || active;
                 const SDL_FRect icon = {150.f + i*32.f, 4.f, 28.f, 25.f};
                 // Flash the just-used slot before it goes dark
                 const bool flashing = (sfFrames > 0 && i == sh.charges && !avail);
                 if (iron_dome_icon_texture) {
-                    Uint8 alpha = avail ? 255 : (flashing && (sfFrames / 4) % 2 == 0 ? 220 : 60);
+                    Uint8 alpha = avail ? (active && !blinkOn ? 120 : 255)
+                                       : (flashing && (sfFrames / 4) % 2 == 0 ? 220 : 60);
                     SDL_SetTextureAlphaMod(iron_dome_icon_texture, alpha);
                     SDL_RenderTexture(ren, iron_dome_icon_texture, nullptr, &icon);
                     SDL_SetTextureAlphaMod(iron_dome_icon_texture, 255);
@@ -2104,17 +2308,22 @@ namespace ci
             if (rf.frames > 0) {
                 SDL_SetRenderDrawColor(ren, 60, 50, 10, 255);
                 SDL_FRect bgr = {barX, barY, barW, 4.f}; SDL_RenderFillRect(ren, &bgr);
-                SDL_SetRenderDrawColor(ren, 255, 220, 30, 255);
-                SDL_FRect fill = {barX, barY, barW * std::min((float)rf.frames/300.f,1.f), 4.f};
-                SDL_RenderFillRect(ren, &fill);
+                if (blinkOn) {
+                    SDL_SetRenderDrawColor(ren, 255, 220, 30, 255);
+                    SDL_FRect fill = {barX, barY, barW * std::min((float)rf.frames/300.f,1.f), 4.f};
+                    SDL_RenderFillRect(ren, &fill);
+                }
                 barY += 6.f;
             }
             if (e.has<SpreadShot>() && e.get<SpreadShot>().frames > 0) {
+                const int ssFrames = e.get<SpreadShot>().frames;
                 SDL_SetRenderDrawColor(ren, 40, 20, 60, 255);
                 SDL_FRect bgr = {barX, barY, barW, 4.f}; SDL_RenderFillRect(ren, &bgr);
-                SDL_SetRenderDrawColor(ren, 160, 60, 255, 255);
-                SDL_FRect fill = {barX, barY, barW * std::min((float)e.get<SpreadShot>().frames/300.f,1.f), 4.f};
-                SDL_RenderFillRect(ren, &fill);
+                if (blinkOn) {
+                    SDL_SetRenderDrawColor(ren, 160, 60, 255, 255);
+                    SDL_FRect fill = {barX, barY, barW * std::min((float)ssFrames/300.f,1.f), 4.f};
+                    SDL_RenderFillRect(ren, &fill);
+                }
             }
 
             // Dash cooldown indicator (small cyan arc-like bar above player)
@@ -2141,17 +2350,27 @@ namespace ci
                 if (!e.test(smMask2)) continue;
                 const auto& sm = e.get<SlowMo>();
                 if (sm.frames > 0) {
+                    // look up BlinkPhase from the player entity for sync'd blink
+                    static const Mask plBlink = MaskBuilder().set<PlayerTag>().set<BlinkPhase>().build();
+                    bool smBlink = true;
+                    for (Entity p = Entity::first(); !p.eof(); p.next()) {
+                        if (!p.test(plBlink)) continue;
+                        smBlink = p.get<BlinkPhase>().visible;
+                        break;
+                    }
                     const float smW = 120.f * sm.frames / 180.f;
                     SDL_SetRenderDrawColor(ren, 20, 40, 90, 255);
                     SDL_FRect bg = {(float)WIN_W - 130.f, 8.f, 120.f, 10.f};
                     SDL_RenderFillRect(ren, &bg);
-                    SDL_SetRenderDrawColor(ren, 80, 160, 255, 255);
-                    SDL_FRect bar = {(float)WIN_W - 130.f, 8.f, smW, 10.f};
-                    SDL_RenderFillRect(ren, &bar);
-                    SDL_SetRenderScale(ren, 1.5f, 1.5f);
-                    SDL_SetRenderDrawColor(ren, 140, 200, 255, 255);
-                    SDL_RenderDebugText(ren, ((float)WIN_W - 130.f) / 1.5f, 20.f / 1.5f, "SLOW");
-                    SDL_SetRenderScale(ren, 1.f, 1.f);
+                    if (smBlink) {
+                        SDL_SetRenderDrawColor(ren, 80, 160, 255, 255);
+                        SDL_FRect bar = {(float)WIN_W - 130.f, 8.f, smW, 10.f};
+                        SDL_RenderFillRect(ren, &bar);
+                        SDL_SetRenderScale(ren, 1.5f, 1.5f);
+                        SDL_SetRenderDrawColor(ren, 140, 200, 255, 255);
+                        SDL_RenderDebugText(ren, ((float)WIN_W - 130.f) / 1.5f, 20.f / 1.5f, "SLOW");
+                        SDL_SetRenderScale(ren, 1.f, 1.f);
+                    }
                 }
                 break;
             }
@@ -2488,6 +2707,7 @@ namespace ci
                     floating_text_system();
                     hop_system();
                     animate_system();
+                    blink_system();
 
                     // Camera scroll (disabled for level 4)
                     if (_current_level != 4) {
@@ -2558,22 +2778,10 @@ namespace ci
                             }
                         }
 
-                        // Level 4 gets a longer, phased dramatic splash (5 s)
-                        const int splashFrames = (_current_level == 4 ? 300 : 150);
-                        Entity::create().add(LevelSplash{splashFrames});
-                        // Player is invulnerable for the whole splash so the new wave
-                        // can't snipe them during the transition screen.
-                        {
-                            static const Mask plInvMask = MaskBuilder()
-                                .set<PlayerTag>().set<Invincibility>().build();
-                            for (Entity e = Entity::first(); !e.eof(); e.next()) {
-                                if (!e.test(plInvMask)) continue;
-                                auto& inv = e.get<Invincibility>();
-                                if (inv.frames < splashFrames) inv.frames = splashFrames;
-                                break;
-                            }
-                        }
-                        Entity::create().add(SoundEvent{4});
+                        // fromIdx = city we just left, toIdx = city we're flying to
+                        Entity::create().add(MapScreen{420, 0.f, _current_level - 2, _current_level - 1});
+                        Entity::create().add(SoundEvent{4}); // level-clear sound (processed this frame)
+                        _state = GameState::MapScreen;
                         won = false;
                     }
 
@@ -2594,6 +2802,8 @@ namespace ci
                 }
 
                 sound_system();
+            } else if (_state == GameState::MapScreen) {
+                map_screen_system();
             }
 
             SDL_RenderClear(ren);
@@ -2601,6 +2811,8 @@ namespace ci
                 select_draw();
             } else if (_state == GameState::Paused) {
                 draw_pause();
+            } else if (_state == GameState::MapScreen) {
+                draw_map_screen();
             } else {
                 draw_system();
                 {
@@ -2630,11 +2842,17 @@ namespace ci
                         if      (_state == GameState::Playing) _state = GameState::Paused;
                         else if (_state == GameState::Paused)  _state = GameState::Playing;
                     }
+                    if (sc == SDL_SCANCODE_SPACE && !ev.key.repeat && _state == GameState::MapScreen) {
+                        static const Mask msMask = MaskBuilder().set<MapScreen>().build();
+                        for (Entity e = Entity::first(); !e.eof(); e.next())
+                            if (e.test(msMask)) { e.get<MapScreen>().framesLeft = 1; break; }
+                    }
                     if (sc == SDL_SCANCODE_SPACE && _state == GameState::Select) {
                         if (audio_stream) SDL_ClearAudioStream(audio_stream); // stop anthem
-                        _state = GameState::Playing;
                         _current_level = 1;
                         spawn_entities();
+                        Entity::create().add(MapScreen{420, 1.f, 0, 0}); // plane already at start city
+                        _state = GameState::MapScreen;
                     }
                     if (sc == SDL_SCANCODE_R && (gameOver || won)) {
                         _current_level = 1;

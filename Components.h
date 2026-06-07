@@ -24,6 +24,7 @@ namespace ci
 	using GameStatus = struct { bool gameOver; bool won; bool sfxPlayed; int kills; int shots; int hits; Uint64 waveStartTime; Uint64 waveEndTime; };
 	using SelectState  = struct { int selected; bool moved; int difficulty; };  // difficulty: 0=Easy 1=Normal 2=Hard
 	using LevelSplash  = struct { int framesLeft; };
+	using MapScreen    = struct { int framesLeft; float planeT; int fromIdx; int toIdx; };
 	using DamageFlash  = struct { int frames; };
 	using ShieldFlash  = struct { int frames; };
 	using ScreenShake  = struct { int frames; };
@@ -40,6 +41,7 @@ namespace ci
 	using SoundEvent   = struct { int type; };
 	using HopState     = struct { int frames; int maxFrames; float hopDX; };
 	using BreatheState = struct { float phase; float speed; float amplitude; };
+	using BlinkPhase   = struct { bool visible; int counter; int period; };
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;
@@ -79,6 +81,9 @@ template <> struct bagel::Storage<ci::Shelter> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::LevelSplash> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LevelSplash>;
+};
+template <> struct bagel::Storage<ci::MapScreen> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::MapScreen>;
 };
 template <> struct bagel::Storage<ci::DamageFlash> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::DamageFlash>;
@@ -127,4 +132,7 @@ template <> struct bagel::Storage<ci::HopState> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::BreatheState> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::BreatheState>;
+};
+template <> struct bagel::Storage<ci::BlinkPhase> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::BlinkPhase>;
 };

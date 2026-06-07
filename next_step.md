@@ -1,6 +1,6 @@
 # Crossy Invaders — Session Tracker
 
-## Status: Step 13 complete — all 16 polish improvements implemented
+## Status: Steps 14–15 complete (animations, camera, ECS fixes). Next: Step 16 mega-update below.
 
 ---
 
@@ -172,3 +172,48 @@
 | 16 | Sound effects | Add real WAV/OGG sfx for shoot, hit, die, level-clear via SDL3 audio |
 | 17 | Leaderboard screen | Show top-5 scores from file on game-over screen |
 | 18 | More sprites | Replace placeholder rectangles for bullets, pickups, hazards |
+
+---
+
+## Step 19 — Big content update (planned 2026-06-07)
+
+### Gameplay tweaks
+- ✅ **Easy difficulty speed nerf** — already implemented (10–20% speed reduction on easy)
+- ✅ **Animation polish** — already implemented (BreatheState ECS refactor, hop, sprite blink on hit)
+- ✅ **Bonus icon blink** — `BlinkPhase { bool visible; int counter; int period; }` component on player; `blink_system()` toggles it every 8 frames; draw system reads it for RapidFire bar, SpreadShot bar, SlowMo bar+text, and Iron Dome active icon.
+
+### New playable characters (2 added → 4 total)
+| Character | Select anthem | Route: Start → End |
+|-----------|--------------|-------------------|
+| Trump | (existing) | Washington → Tehran |
+| Bibi | (existing) | Jerusalem → Tehran |
+| Ben Gvir | La Familia | West Bank → Tel Aviv |
+| Zelensky | Ukrainian national anthem | Ukraine → Moscow |
+
+### Enemy sets per character
+| Character | Regular enemies | Final boss |
+|-----------|----------------|-----------|
+| Ben Gvir | Kaplanists (Kaplan St. protesters) | Amir Hetzroni — plastic chair falls as death animation |
+| Zelensky | Russian soldiers | Putin |
+| Bibi | Revolutionary Guards | shared Tehran ending with Trump |
+| Trump | Revolutionary Guards | shared Tehran ending with Bibi |
+
+### Special abilities (one per character, replaces generic Iron Dome)
+| Character | Special | Mechanic |
+|-----------|---------|---------|
+| Ben Gvir | Kippah boomerang | Projectile travels in inverted U arc; kills all enemies in its path |
+| Zelensky | Drone strike | Drones fly across screen horizontally, each kills a random enemy on contact |
+| Bibi | Atomic bomb | Meter charges passively over time; when full, player can fire — large AOE |
+| Trump | B-2 airstrike | Calls in a B-2 bomber that wipes all enemies in one selected lane |
+
+### Between-level story screen
+- ✅ **Implemented** — `MapScreen { int framesLeft; }` component; `GameState::MapScreen` state; `map_screen_system()` counts down (240 frames), then creates `LevelSplash` + invincibility and returns to Playing; `draw_map_screen()` draws dark-navy background, route line (dim→gold for reached segments), 4 waypoints (grey→green→gold for current), city labels, blinking "SPACE to continue" prompt. SPACE skips immediately.
+- Routes currently implemented: Trump (Washington→London→Dubai→Tehran), Bibi (Jerusalem→Amman→Baghdad→Tehran). Ben Gvir and Zelensky routes to be added when those characters are implemented.
+
+### New images/sprites to add
+- Ben Gvir with kippah
+- Zelensky
+- Putin
+- Amir Hetzroni
+- Kaplanist protesters
+- Plastic chair (Hetzroni death prop)

@@ -7,7 +7,7 @@
 
 namespace ci
 {
-	enum class GameState { Select, Playing, LevelTransition, Paused };
+	enum class GameState { Select, Playing, LevelTransition, Paused, MapScreen };
 
 	class Game
 	{
@@ -58,6 +58,9 @@ namespace ci
 		void sound_system() const;
 		void hop_system() const;
 		void animate_system() const;
+		void blink_system() const;
+		void map_screen_system() const;
+		void draw_map_screen() const;
 		void play_sfx(int type) const;
 		void load_high_score();
 		void save_high_score() const;
