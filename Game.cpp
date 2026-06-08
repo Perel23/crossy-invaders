@@ -781,65 +781,33 @@ namespace ci
                 }
                 break;
             }
-            case 7: {   // Hatikva — load from res/hatikva.wav
+            case 7:  case 8:  case 9:  case 10:
+            case 11: case 12: case 13: case 14: {
+                static const char* wav_files[] = {
+                    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                    "res/hatikva.wav",         //  7
+                    "res/ssb.wav",             //  8
+                    "res/ani_maamin.wav",       //  9
+                    "res/ukrainian_anthem.wav", // 10
+                    "res/russian_anthem.wav",   // 11
+                    "res/slim_shady.wav",       // 12
+                    "res/like_a_virgin.wav",    // 13
+                    "res/thriller.wav",         // 14
+                };
                 SDL_AudioSpec wavSpec{};
                 Uint8* wavBuf = nullptr;
                 Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/hatikva.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen);
+                if (SDL_LoadWAV(wav_files[type], &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    // Auto-convert to stream format (mono S16 44100) so stereo files work too
+                    const SDL_AudioSpec streamSpec{ SDL_AUDIO_S16, 1, 44100 };
+                    Uint8* convBuf = nullptr;
+                    int    convLen = 0;
+                    if (SDL_ConvertAudioSamples(&wavSpec, wavBuf, (int)wavLen,
+                                               &streamSpec, &convBuf, &convLen) && convBuf) {
+                        SDL_PutAudioStreamData(audio_stream, convBuf, convLen);
+                        SDL_free(convBuf);
+                    }
                     SDL_free(wavBuf);
-                }
-                return; // data already pushed — skip buf path below
-            }
-            case 8: {   // Star-Spangled Banner — load from res/ssb.wav
-                SDL_AudioSpec wavSpec{};
-                Uint8* wavBuf = nullptr;
-                Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/ssb.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen);
-                    SDL_free(wavBuf);
-                }
-                return;
-            }
-            case 9: {   // אני מאמין — Ben Gvir
-                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/ani_maamin.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
-                }
-                return;
-            }
-            case 10: {  // Ukrainian anthem — Zelensky
-                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/ukrainian_anthem.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
-                }
-                return;
-            }
-            case 11: {  // Russian anthem — Putin
-                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/russian_anthem.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
-                }
-                return;
-            }
-            case 12: {  // Slim Shady — Eminem
-                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/slim_shady.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
-                }
-                return;
-            }
-            case 13: {  // Like a Virgin — Madonna
-                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/like_a_virgin.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
-                }
-                return;
-            }
-            case 14: {  // Thriller — Michael Jackson
-                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
-                if (SDL_LoadWAV("res/thriller.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
-                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
                 }
                 return;
             }
