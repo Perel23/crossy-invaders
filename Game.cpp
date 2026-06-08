@@ -783,7 +783,7 @@ namespace ci
             }
             case 7:  case 8:  case 9:  case 10:
             case 11: case 12: case 13: case 14:
-            case 15: case 16: case 17: {
+            case 15: case 16: case 17: case 18: {
                 static const char* wav_files[] = {
                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                     "res/hatikva.wav",         //  7
@@ -797,6 +797,7 @@ namespace ci
                     "res/ba_ma.wav",            // 15 Sara
                     "res/moscow.wav",           // 16 Stalin
                     "res/ma_sheat_ohevet.wav",  // 17 Yoamashit
+                    "res/f_the_police.wav",     // 18 Obama
                 };
                 SDL_AudioSpec wavSpec{};
                 Uint8* wavBuf = nullptr;
@@ -1100,7 +1101,7 @@ namespace ci
                 9,   // 2  Ben Gvir    — Ani Maamin
                 10,  // 3  Zelensky    — Ukrainian anthem
                 11,  // 4  Putin       — Russian anthem
-                0,   // 5  Obama       — (coming soon)
+                18,  // 5  Obama       — F*** tha Police
                 12,  // 6  Eminem      — Slim Shady
                 13,  // 7  Madonna     — Like a Virgin
                 14,  // 8  M.Jackson   — Thriller
