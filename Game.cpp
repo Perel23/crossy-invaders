@@ -715,7 +715,7 @@ namespace ci
         if ((SDL_GetTicks() / 500) % 2 == 0) {
             SDL_SetRenderScale(ren, 1.5f, 1.5f);
             SDL_SetRenderDrawColor(ren, 130, 130, 140, 255);
-            SDL_RenderDebugText(ren, (WIN_W / 2.f - 84.f) / 1.5f, (WIN_H - 52.f) / 1.5f, "SPACE to skip");
+            SDL_RenderDebugText(ren, (WIN_W / 2.f - 84.f) / 1.5f, (WIN_H - 52.f) / 1.5f, "ENTER to skip");
             SDL_SetRenderScale(ren, 1.f, 1.f);
         }
     }
@@ -2918,7 +2918,7 @@ namespace ci
                         if      (_state == GameState::Playing) _state = GameState::Paused;
                         else if (_state == GameState::Paused)  _state = GameState::Playing;
                     }
-                    if (sc == SDL_SCANCODE_SPACE && !ev.key.repeat && _state == GameState::MapScreen) {
+                    if (sc == SDL_SCANCODE_RETURN && !ev.key.repeat && _state == GameState::MapScreen) {
                         static const Mask msMask = MaskBuilder().set<MapScreen>().build();
                         for (Entity e = Entity::first(); !e.eof(); e.next())
                             if (e.test(msMask)) { e.get<MapScreen>().framesLeft = 1; break; }
