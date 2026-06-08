@@ -46,9 +46,15 @@ namespace ci
                 SDL_DestroySurface(s);
                 return t;
             };
-            bg_texture            = nullptr; // procedural background — no image needed
-            trump_select_tex      = loadTex("res/trump_pixel.png");
-            bibi_select_tex       = loadTex("res/bibi_pixel.png");
+            bg_texture = nullptr; // procedural background — no image needed
+            static const char* char_files[NUM_CHARS] = {
+                "res/trump_pixel.png", "res/bibi_pixel.png", "res/bengvir_pixel.png",
+                "res/zelensky_pixel.png", "res/putin_pixel.png", "res/obama_pixel.png",
+                "res/eminem_pixel.png", "res/madonna_pixel.png", "res/michaeljackson_pixel.png",
+                "res/sara_pixel.png", "res/stalin_pixel.png", "res/yoamashit_pixel.png"
+            };
+            for (int i = 0; i < NUM_CHARS; i++)
+                char_select_tex[i] = loadTex(char_files[i]);
             shelter_texture       = loadTex("res/miklat.png");
             boss_texture          = loadTex("res/khamenai.png");
             hearts_texture        = loadTex("res/hearts_spreadsheet.png");
@@ -76,8 +82,8 @@ namespace ci
         if (hearts_texture)         SDL_DestroyTexture(hearts_texture);
         if (iron_dome_texture)      SDL_DestroyTexture(iron_dome_texture);
         if (iron_dome_icon_texture) SDL_DestroyTexture(iron_dome_icon_texture);
-        if (trump_select_tex)       SDL_DestroyTexture(trump_select_tex);
-        if (bibi_select_tex)        SDL_DestroyTexture(bibi_select_tex);
+        for (int i = 0; i < NUM_CHARS; i++)
+            if (char_select_tex[i]) SDL_DestroyTexture(char_select_tex[i]);
         for (int i = 0; i < 4; i++)
             if (haz_textures[i]) SDL_DestroyTexture(haz_textures[i]);
         if (audio_stream) SDL_DestroyAudioStream(audio_stream);
@@ -127,8 +133,14 @@ namespace ci
                 break;
             }
 
+        static const char* char_files[NUM_CHARS] = {
+            "res/trump_pixel.png", "res/bibi_pixel.png", "res/bengvir_pixel.png",
+            "res/zelensky_pixel.png", "res/putin_pixel.png", "res/obama_pixel.png",
+            "res/eminem_pixel.png", "res/madonna_pixel.png", "res/michaeljackson_pixel.png",
+            "res/sara_pixel.png", "res/stalin_pixel.png", "res/yoamashit_pixel.png"
+        };
         if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
-        SDL_Surface* ps = IMG_Load(selected == 0 ? "res/trump_pixel.png" : "res/bibi_pixel.png");
+        SDL_Surface* ps = IMG_Load(char_files[selected < NUM_CHARS ? selected : 0]);
         if (ps) { player_texture = SDL_CreateTextureFromSurface(ren, ps); SDL_DestroySurface(ps); }
 
         if (enemy_texture) { SDL_DestroyTexture(enemy_texture); enemy_texture = nullptr; }
@@ -1049,11 +1061,14 @@ namespace ci
         auto& ss = ssEnt.get<SelectState>();
 
         const bool* keys = SDL_GetKeyboardState(nullptr);
-        const bool lr = keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_RIGHT];
-        const bool ud = keys[SDL_SCANCODE_UP]   || keys[SDL_SCANCODE_DOWN];
+        const bool goRight = keys[SDL_SCANCODE_RIGHT];
+        const bool goLeft  = keys[SDL_SCANCODE_LEFT];
+        const bool lr = goLeft || goRight;
+        const bool ud = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_DOWN];
 
         if ((lr || ud) && !ss.moved) {
-            if (lr) ss.selected   = 1 - ss.selected;
+            if (goRight) ss.selected = (ss.selected + 1) % NUM_CHARS;
+            if (goLeft)  ss.selected = (ss.selected - 1 + NUM_CHARS) % NUM_CHARS;
             if (keys[SDL_SCANCODE_UP])   ss.difficulty = std::min(ss.difficulty + 1, 2);
             if (keys[SDL_SCANCODE_DOWN]) ss.difficulty = std::max(ss.difficulty - 1, 0);
             ss.moved = true;
@@ -1061,10 +1076,12 @@ namespace ci
             ss.moved = false;
         }
 
-        // Play anthem when a different character is highlighted (0=Trump/USA, 1=Bibi/Hatikva)
+        // Play anthem when character changes; Trump=USA, Bibi=Hatikva, others=silence
         if (_select_last_char != ss.selected) {
             _select_last_char = ss.selected;
-            play_sfx(ss.selected == 0 ? 8 : 7);
+            if (ss.selected == 0)      play_sfx(8);  // USA anthem
+            else if (ss.selected == 1) play_sfx(7);  // Hatikva
+            else                       SDL_ClearAudioStream(audio_stream);
         }
     }
 
@@ -1133,98 +1150,127 @@ namespace ci
         SDL_RenderDebugText(ren, ((float)WIN_W - 104.f) / 1.2f, 9.f, hsbuf);
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
-        // ── Character boxes  (Y: 92 → 402) ──
-        // BOX_H=310 gives images ~260px tall — 80% of the card height
-        constexpr float BOX_W   = 230.f, BOX_H = 310.f, BOX_GAP = 80.f;
-        constexpr float TRUMP_X = (WIN_W - 2.f * BOX_W - BOX_GAP) / 2.f;  // 242
-        constexpr float BIBI_X  = TRUMP_X + BOX_W + BOX_GAP;               // 552
-        constexpr float BOX_Y   = 92.f;
+        // ── Character carousel  (Y: 92 → 402) ──
+        // Carousel shows 5 cards: selected (large) + ±1 (medium) + ±2 (small)
+        // Card geometry
+        static const char* char_names[NUM_CHARS] = {
+            "TRUMP", "BIBI", "BEN GVIR", "ZELENSKY", "PUTIN", "OBAMA",
+            "EMINEM", "MADONNA", "M.JACKSON", "SARA", "STALIN", "YOAMASHIT"
+        };
+        // Per-character accent colours (bg, header)
+        static const SDL_Color char_bg[NUM_CHARS] = {
+            {150,75,15,255}, {20,60,150,255}, {80,20,20,255}, {20,100,60,255},
+            {80,10,10,255},  {10,40,100,255}, {60,20,80,255}, {100,20,60,255},
+            {20,20,20,255},  {80,40,80,255},  {30,10,10,255}, {10,60,40,255}
+        };
+        static const SDL_Color char_hdr[NUM_CHARS] = {
+            {210,110,30,255}, {50,110,220,255}, {160,40,40,255}, {40,180,100,255},
+            {160,20,20,255},  {20,80,200,255},  {130,50,180,255},{200,50,120,255},
+            {60,60,60,255},   {160,80,160,255}, {80,20,20,255},  {20,140,80,255}
+        };
 
-        // Selection glow
-        const float selX = (selected == 0) ? TRUMP_X : BIBI_X;
-        SDL_SetRenderDrawColor(ren, 255, 255, 100, 255);
-        SDL_FRect selGlow = {selX - 6.f, BOX_Y - 6.f, BOX_W + 12.f, BOX_H + 12.f};
-        SDL_RenderFillRect(ren, &selGlow);
+        // Slot offsets: -2, -1, 0(selected), +1, +2
+        constexpr int SLOTS = 5;
+        const int offsets[SLOTS] = { -2, -1, 0, 1, 2 };
+        // Card sizes per slot (index 0..4)
+        const float card_w[SLOTS] = { 120.f, 175.f, 240.f, 175.f, 120.f };
+        const float card_h[SLOTS] = { 165.f, 240.f, 310.f, 240.f, 165.f };
+        constexpr float BOX_Y = 92.f;
+        constexpr float CX = WIN_W / 2.f;  // 512
 
-        // Trump box
-        SDL_SetRenderDrawColor(ren, 150, 75, 15, 255);
-        SDL_FRect trumpBox = {TRUMP_X, BOX_Y, BOX_W, BOX_H};
-        SDL_RenderFillRect(ren, &trumpBox);
-        SDL_SetRenderDrawColor(ren, 210, 110, 30, 255);
-        SDL_FRect trumpTop = {TRUMP_X, BOX_Y, BOX_W, 30.f};
-        SDL_RenderFillRect(ren, &trumpTop);
+        // Compute left-edge x for each slot (cards packed from center)
+        // selected card is centered at CX
+        float card_x[SLOTS];
+        card_x[2] = CX - card_w[2] / 2.f;                          // selected
+        card_x[1] = card_x[2] - 20.f - card_w[1];                  // left-1
+        card_x[0] = card_x[1] - 15.f - card_w[0];                  // left-2
+        card_x[3] = card_x[2] + card_w[2] + 20.f;                  // right-1
+        card_x[4] = card_x[3] + card_w[3] + 15.f;                  // right-2
 
-        // Bibi box
-        SDL_SetRenderDrawColor(ren, 20, 60, 150, 255);
-        SDL_FRect bibiBox = {BIBI_X, BOX_Y, BOX_W, BOX_H};
-        SDL_RenderFillRect(ren, &bibiBox);
-        SDL_SetRenderDrawColor(ren, 50, 110, 220, 255);
-        SDL_FRect bibiTop = {BIBI_X, BOX_Y, BOX_W, 30.f};
-        SDL_RenderFillRect(ren, &bibiTop);
+        // Draw cards back-to-front (±2 first, selected last)
+        const int draw_order[SLOTS] = { 0, 4, 1, 3, 2 };
+        for (int di = 0; di < SLOTS; di++) {
+            const int si = draw_order[di];
+            const int ci = (selected + offsets[si] + NUM_CHARS) % NUM_CHARS;
+            const float bx = card_x[si];
+            const float by = BOX_Y + (card_h[2] - card_h[si]) / 2.f;  // vertically centered
+            const float bw = card_w[si];
+            const float bh = card_h[si];
+            const bool isSel = (si == 2);
 
-        // Character names — scale 2: "TRUMP"=80px, "BIBI"=64px
-        SDL_SetRenderScale(ren, 2.f, 2.f);
-        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-        SDL_RenderDebugText(ren, (TRUMP_X + (BOX_W - 80.f)/2.f) / 2.f, (BOX_Y + 9.f) / 2.f, "TRUMP");
-        SDL_RenderDebugText(ren, (BIBI_X  + (BOX_W - 64.f)/2.f) / 2.f, (BOX_Y + 9.f) / 2.f, "BIBI");
-        SDL_SetRenderScale(ren, 1.f, 1.f);
+            // Yellow glow border for selected
+            if (isSel) {
+                SDL_SetRenderDrawColor(ren, 255, 255, 100, 255);
+                SDL_FRect glow = {bx - 6.f, by - 6.f, bw + 12.f, bh + 12.f};
+                SDL_RenderFillRect(ren, &glow);
+            }
 
-        // Sprites — fill nearly the full box height below the header strip
-        constexpr float IMG_PAD = 10.f, IMG_H = BOX_H - 40.f;  // 270px tall
-        if (trump_select_tex) {
-            SDL_FRect td = {TRUMP_X + IMG_PAD, BOX_Y + 32.f, BOX_W - IMG_PAD*2.f, IMG_H};
-            SDL_RenderTexture(ren, trump_select_tex, nullptr, &td);
-        }
-        if (bibi_select_tex) {
-            SDL_FRect bd = {BIBI_X + IMG_PAD, BOX_Y + 32.f, BOX_W - IMG_PAD*2.f, IMG_H};
-            SDL_RenderTexture(ren, bibi_select_tex, nullptr, &bd);
-        }
+            // Card background
+            SDL_SetRenderDrawColor(ren, char_bg[ci].r, char_bg[ci].g, char_bg[ci].b, 255);
+            SDL_FRect box = {bx, by, bw, bh};
+            SDL_RenderFillRect(ren, &box);
 
-        // Shine sweep: a semi-transparent white stripe that glides across each
-        // portrait every ~4 seconds, like light reflecting off the character.
-        // _select_scroll increments 0.5/frame → period = 480 increments = ~16 s total,
-        // but we run a shine every 240 increments (~8 s) using fmod.
-        {
-            constexpr float PERIOD  = 240.f;   // scroll units per shine cycle
-            constexpr float SHINE_W = 28.f;    // width of the streak
-            const float portX = TRUMP_X + IMG_PAD;
-            const float portW = BOX_W - IMG_PAD * 2.f;
-            const float portY = BOX_Y + 32.f;
+            // Header strip
+            const float hdrH = bh * 0.10f;  // ~10% of card height
+            SDL_SetRenderDrawColor(ren, char_hdr[ci].r, char_hdr[ci].g, char_hdr[ci].b, 255);
+            SDL_FRect hdr = {bx, by, bw, hdrH};
+            SDL_RenderFillRect(ren, &hdr);
 
-            // t in [0,1] over the period; shine crosses the portrait when t in [0, 1]
-            const float t = std::fmod(_select_scroll, PERIOD) / PERIOD;
-            // x goes from (portX - SHINE_W) to (portX + portW), clamped to portrait
-            const float rawX = portX - SHINE_W + t * (portW + SHINE_W * 2.f);
-            // Alpha bell: peak at centre of sweep, zero at edges
-            const float alpha = std::sin(t * (float)M_PI) * 110.f;
-            if (alpha > 2.f) {
+            // Character name in header — scale by card width relative to selected
+            const float nameScale = isSel ? 2.f : (si == 1 || si == 3) ? 1.5f : 1.1f;
+            SDL_SetRenderScale(ren, nameScale, nameScale);
+            SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+            const float nameLen = (float)SDL_strlen(char_names[ci]) * 8.f;
+            const float nameX = (bx + (bw - nameLen * nameScale) / 2.f) / nameScale;
+            const float nameY = (by + (hdrH - 8.f * nameScale) / 2.f) / nameScale;
+            SDL_RenderDebugText(ren, nameX, nameY, char_names[ci]);
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+
+            // Portrait sprite
+            const float pad = bw * 0.04f;
+            SDL_FRect img = {bx + pad, by + hdrH + 2.f, bw - pad * 2.f, bh - hdrH - 4.f};
+            if (char_select_tex[ci])
+                SDL_RenderTexture(ren, char_select_tex[ci], nullptr, &img);
+
+            // Dim overlay for non-selected cards (makes selected pop)
+            if (!isSel) {
                 SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(ren, 255, 255, 240, (Uint8)alpha);
-                // Trump shine
-                const float tx = std::max(portX, std::min(rawX, portX + portW - SHINE_W));
-                SDL_FRect tShine = {tx, portY, SHINE_W, IMG_H};
-                SDL_RenderFillRect(ren, &tShine);
-                // Bibi shine — offset half a period so they don't shine simultaneously
-                const float bt = std::fmod(_select_scroll + PERIOD * 0.5f, PERIOD) / PERIOD;
-                const float bRawX = (BIBI_X + IMG_PAD) - SHINE_W + bt * (portW + SHINE_W * 2.f);
-                const float bAlpha = std::sin(bt * (float)M_PI) * 110.f;
-                if (bAlpha > 2.f) {
-                    SDL_SetRenderDrawColor(ren, 255, 255, 240, (Uint8)bAlpha);
-                    const float bx = std::max(BIBI_X + IMG_PAD,
-                                              std::min(bRawX, BIBI_X + IMG_PAD + portW - SHINE_W));
-                    SDL_FRect bShine = {bx, portY, SHINE_W, IMG_H};
-                    SDL_RenderFillRect(ren, &bShine);
-                }
+                SDL_SetRenderDrawColor(ren, 0, 0, 0, (si == 1 || si == 3) ? 90 : 150);
+                SDL_RenderFillRect(ren, &box);
                 SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+            }
+
+            // Shine sweep on selected card only
+            if (isSel) {
+                constexpr float PERIOD = 240.f, SHINE_W = 28.f;
+                const float t = std::fmod(_select_scroll, PERIOD) / PERIOD;
+                const float rawX = bx + pad - SHINE_W + t * (img.w + SHINE_W * 2.f);
+                const float alpha = std::sin(t * (float)M_PI) * 110.f;
+                if (alpha > 2.f) {
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                    SDL_SetRenderDrawColor(ren, 255, 255, 240, (Uint8)alpha);
+                    const float sx = std::max(bx + pad, std::min(rawX, bx + pad + img.w - SHINE_W));
+                    SDL_FRect shine = {sx, img.y, SHINE_W, img.h};
+                    SDL_RenderFillRect(ren, &shine);
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+                }
             }
         }
 
-        // ← → hint — 12px below box bottom (BOX bottom = 92+310 = 402)
-        // "<  LEFT/RIGHT  >" = 16 chars × 8 × 1.2 = 153px; centre x=(1024-153)/2=435; canvas=362
-        SDL_SetRenderScale(ren, 1.2f, 1.2f);
-        SDL_SetRenderDrawColor(ren, 140, 140, 160, 255);
-        SDL_RenderDebugText(ren, 362.f, 414.f / 1.2f, "<  LEFT/RIGHT  >");
-        SDL_SetRenderScale(ren, 1.f, 1.f);
+        // ← → hint + character counter below carousel
+        {
+            char cntbuf[16];
+            SDL_snprintf(cntbuf, sizeof(cntbuf), "%d / %d", selected + 1, NUM_CHARS);
+            // Navigation arrows
+            SDL_SetRenderScale(ren, 1.2f, 1.2f);
+            SDL_SetRenderDrawColor(ren, 140, 140, 160, 255);
+            SDL_RenderDebugText(ren, 290.f, 414.f / 1.2f, "<  LEFT / RIGHT  >");
+            // Counter centred
+            SDL_SetRenderDrawColor(ren, 200, 200, 80, 255);
+            const float cntW = (float)SDL_strlen(cntbuf) * 8.f * 1.2f;
+            SDL_RenderDebugText(ren, ((float)WIN_W / 2.f - cntW / 2.f) / 1.2f, 430.f / 1.2f, cntbuf);
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
 
         // ── Difficulty selector  (Y: 438 → 488) ──
         constexpr float diffY = 440.f;

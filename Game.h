@@ -85,9 +85,9 @@ namespace ci
 		mutable int _high_score       = 0;
 		mutable int _total_kills      = 0;   // accumulated across all levels
 		mutable int _wave_enemy_count = 0;
-		mutable SDL_Texture* haz_textures[4]   = {nullptr, nullptr, nullptr, nullptr};
-		mutable SDL_Texture* trump_select_tex  = nullptr;
-		mutable SDL_Texture* bibi_select_tex   = nullptr;
+		static constexpr int NUM_CHARS = 12;
+		mutable SDL_Texture* haz_textures[4]      = {nullptr, nullptr, nullptr, nullptr};
+		mutable SDL_Texture* char_select_tex[NUM_CHARS] = {};
 		mutable SDL_AudioStream* audio_stream  = nullptr;
 
 		mutable float        _camera_scroll       = 0.f;  // px added to every rendered Y (grows → entities scroll down)
