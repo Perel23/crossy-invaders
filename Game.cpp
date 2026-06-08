@@ -724,11 +724,11 @@ namespace ci
     void Game::play_sfx(int type) const
     {
         if (!audio_stream) return;
-        // Anthems (7=Hatikva, 8=Star-Spangled Banner) bypass queue throttle and clear first
-        if (type != 7 && type != 8) {
-            if (SDL_GetAudioStreamQueued(audio_stream) > 44100 * 150 / 1000 * (int)sizeof(Sint16)) return;
-        } else {
+        // Anthems (types 7-14) bypass queue throttle and clear the stream first
+        if (type >= 7) {
             SDL_ClearAudioStream(audio_stream);
+        } else {
+            if (SDL_GetAudioStreamQueued(audio_stream) > 44100 * 150 / 1000 * (int)sizeof(Sint16)) return;
         }
 
         std::vector<Sint16> buf;
@@ -799,7 +799,49 @@ namespace ci
                     SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen);
                     SDL_free(wavBuf);
                 }
-                return; // data already pushed — skip buf path below
+                return;
+            }
+            case 9: {   // אני מאמין — Ben Gvir
+                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/ani_maamin.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
+                }
+                return;
+            }
+            case 10: {  // Ukrainian anthem — Zelensky
+                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/ukrainian_anthem.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
+                }
+                return;
+            }
+            case 11: {  // Russian anthem — Putin
+                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/russian_anthem.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
+                }
+                return;
+            }
+            case 12: {  // Slim Shady — Eminem
+                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/slim_shady.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
+                }
+                return;
+            }
+            case 13: {  // Like a Virgin — Madonna
+                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/like_a_virgin.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
+                }
+                return;
+            }
+            case 14: {  // Thriller — Michael Jackson
+                SDL_AudioSpec wavSpec{}; Uint8* wavBuf = nullptr; Uint32 wavLen = 0;
+                if (SDL_LoadWAV("res/thriller.wav", &wavSpec, &wavBuf, &wavLen) && wavBuf) {
+                    SDL_PutAudioStreamData(audio_stream, wavBuf, (int)wavLen); SDL_free(wavBuf);
+                }
+                return;
             }
             default: return;
         }
@@ -1076,12 +1118,27 @@ namespace ci
             ss.moved = false;
         }
 
-        // Play anthem when character changes; Trump=USA, Bibi=Hatikva, others=silence
+        // Play anthem/song when character changes
         if (_select_last_char != ss.selected) {
             _select_last_char = ss.selected;
-            if (ss.selected == 0)      play_sfx(8);  // USA anthem
-            else if (ss.selected == 1) play_sfx(7);  // Hatikva
-            else                       SDL_ClearAudioStream(audio_stream);
+            // sfx map: index → type (0=no sound)
+            static const int char_sfx[NUM_CHARS] = {
+                8,   // 0  Trump       — Star-Spangled Banner
+                7,   // 1  Bibi        — Hatikva
+                9,   // 2  Ben Gvir    — Ani Maamin
+                10,  // 3  Zelensky    — Ukrainian anthem
+                11,  // 4  Putin       — Russian anthem
+                0,   // 5  Obama       — (coming soon)
+                12,  // 6  Eminem      — Slim Shady
+                13,  // 7  Madonna     — Like a Virgin
+                14,  // 8  M.Jackson   — Thriller
+                0,   // 9  Sara        — (coming soon)
+                0,   // 10 Stalin      — (coming soon)
+                0,   // 11 Yoamashit   — (coming soon)
+            };
+            const int sfx = char_sfx[ss.selected];
+            if (sfx != 0) play_sfx(sfx);
+            else          SDL_ClearAudioStream(audio_stream);
         }
     }
 
