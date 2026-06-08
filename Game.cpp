@@ -782,7 +782,8 @@ namespace ci
                 break;
             }
             case 7:  case 8:  case 9:  case 10:
-            case 11: case 12: case 13: case 14: {
+            case 11: case 12: case 13: case 14:
+            case 15: case 16: case 17: {
                 static const char* wav_files[] = {
                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                     "res/hatikva.wav",         //  7
@@ -793,6 +794,9 @@ namespace ci
                     "res/slim_shady.wav",       // 12
                     "res/like_a_virgin.wav",    // 13
                     "res/thriller.wav",         // 14
+                    "res/ba_ma.wav",            // 15 Sara
+                    "res/moscow.wav",           // 16 Stalin
+                    "res/ma_sheat_ohevet.wav",  // 17 Yoamashit
                 };
                 SDL_AudioSpec wavSpec{};
                 Uint8* wavBuf = nullptr;
@@ -1100,9 +1104,9 @@ namespace ci
                 12,  // 6  Eminem      — Slim Shady
                 13,  // 7  Madonna     — Like a Virgin
                 14,  // 8  M.Jackson   — Thriller
-                0,   // 9  Sara        — (coming soon)
-                0,   // 10 Stalin      — (coming soon)
-                0,   // 11 Yoamashit   — (coming soon)
+                15,  // 9  Sara        — Ba Ma
+                16,  // 10 Stalin      — Moscow
+                17,  // 11 Yoamashit   — Ma Sheat Ohevet
             };
             const int sfx = char_sfx[ss.selected];
             if (sfx != 0) play_sfx(sfx);
