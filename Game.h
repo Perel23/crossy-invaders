@@ -7,7 +7,7 @@
 
 namespace ci
 {
-	enum class GameState { Select, Playing, LevelTransition, Paused, MapScreen };
+	enum class GameState { Select, Playing, LevelTransition, Paused, MapScreen, Benchmark };
 
 	class Game
 	{
@@ -61,6 +61,9 @@ namespace ci
 		void blink_system() const;
 		void map_screen_system() const;
 		void draw_map_screen() const;
+		void spawn_benchmark() const;
+		void bench_system() const;
+		void draw_benchmark_hud() const;
 		void play_sfx(int type) const;
 		void load_high_score();
 		void save_high_score() const;
@@ -95,6 +98,10 @@ namespace ci
 		mutable int          _camera_grace        = 180;  // frames before camera starts moving
 		mutable float        _select_scroll       = 0.f;  // animated select-screen background offset
 		mutable int          _select_last_char   = -1;   // last character whose anthem played (-1=none)
+		mutable bool         _show_perf_hud      = true; // toggle with H key
+		mutable Uint64       _bench_timer        = 0;   // benchmark: last enemy-respawn check time
+		mutable int          _bench_frame        = 0;   // benchmark: frame counter for auto-shoot
+		mutable int          _bench_max_speedup  = 0;   // benchmark: peak speedup ratio ever recorded
 		mutable int          _difficulty     = 1;     // 0=Easy 1=Normal 2=Hard (cached at game start)
 		// Previous-wave stats saved before spawn_enemy_wave() resets them, used by draw_level_splash()
 		mutable int          _prev_kills     = 0;

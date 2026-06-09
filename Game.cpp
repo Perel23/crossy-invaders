@@ -419,31 +419,308 @@ namespace ci
         }
     }
 
+    // ─────────────────────────────── Benchmark ───────────────────────────────────
+    static constexpr int BENCH_ENEMY_ROWS = 10;
+    static constexpr int BENCH_ENEMY_COLS = 15;   // 150 enemies total
+    static constexpr int BENCH_ENEMY_MIN  = 80;   // respawn threshold
+
+    void Game::spawn_benchmark() const
+    {
+        // ── Load textures ──
+        if (!enemy_texture) {
+            SDL_Surface* s = IMG_Load("res/iranian_regime_pixel.png");
+            if (s) { enemy_texture = SDL_CreateTextureFromSurface(ren, s); SDL_DestroySurface(s); }
+        }
+        const char* hazard_files[] = {
+            "res/usa_presidential_limousine.png", "res/wing_of_zion.png",
+            "res/tank_merkava_4.png",             "res/iranian_karrar_tank.png"
+        };
+        for (int i = 0; i < 4; i++) {
+            if (!haz_textures[i]) {
+                SDL_Surface* surf = IMG_Load(hazard_files[i]);
+                if (surf) { haz_textures[i] = SDL_CreateTextureFromSurface(ren, surf); SDL_DestroySurface(surf); }
+            }
+        }
+        // Load the currently selected character's texture
+        {
+            static const char* char_files[NUM_CHARS] = {
+                "res/trump_pixel.png", "res/bibi_pixel.png", "res/bengvir_pixel.png",
+                "res/zelensky_pixel.png", "res/putin_pixel.png", "res/obama_pixel.png",
+                "res/eminem_pixel.png", "res/madonna_pixel.png", "res/michaeljackson_pixel.png",
+                "res/sara_pixel.png", "res/stalin_pixel.png", "res/yoamashit_pixel.png"
+            };
+            static const Mask ssMask = MaskBuilder().set<SelectState>().build();
+            int selected = 0;
+            for (Entity e = Entity::first(); !e.eof(); e.next())
+                if (e.test(ssMask)) { selected = e.get<SelectState>().selected; break; }
+            if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
+            SDL_Surface* ps = IMG_Load(char_files[selected < NUM_CHARS ? selected : 0]);
+            if (ps) { player_texture = SDL_CreateTextureFromSurface(ren, ps); SDL_DestroySurface(ps); }
+        }
+
+        // ── Enemies: 10 rows × 15 cols spread across the screen ──
+        for (int row = 0; row < BENCH_ENEMY_ROWS; row++) {
+            for (int col = 0; col < BENCH_ENEMY_COLS; col++) {
+                const int lane = 2 + row;
+                const int ecol = col + (COLS - BENCH_ENEMY_COLS) / 2;
+                const float phase = (col * 13 + row * 7) % 100 * 0.063f;
+                Entity::create().addAll(
+                    Transform{{TILE / 2.f + ecol * TILE, WIN_H - TILE / 2.f - lane * TILE}, 0.f},
+                    Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
+                    LanePos{lane, ecol}, EnemyTag{}, Health{20},
+                    IndividualMove{SDL_GetTicks() + (Uint64)(std::rand() % 800)},
+                    BreatheState{phase, 0.05f, 2.f});
+            }
+        }
+
+        // ── 6 hazards (3 lanes, 2 directions) ──
+        struct HazInfo { int lane; float dx; int tex; };
+        const float spd = 3.5f;
+        const HazInfo hz[] = { {5,  spd, 0}, {7, -spd, 2}, {9,  spd, 3} };
+        for (const auto& h : hz) {
+            const float hy = WIN_H - TILE / 2.f - h.lane * TILE;
+            for (int k = 0; k < 2; k++) {
+                const float initPhase = (float)(std::rand() % 628) * 0.01f;
+                Entity::create().addAll(
+                    Transform{{(float)(std::rand() % WIN_W), hy}, 0.f},
+                    Drawable{{0, 0, 0, 0}, {HAZARD_W, HAZARD_H}},
+                    Velocity{h.dx, 0.f}, Hazard{}, HazardVisual{h.tex},
+                    BreatheState{initPhase, 0.15f, 1.5f});
+            }
+        }
+
+        // ── Invincible auto-shooting player ──
+        Entity::create().addAll(
+            Transform{{WIN_W / 2.f, WIN_H - TILE * 1.5f}, 0.f},
+            Drawable{{0, 0, 0, 0}, {TILE - 4.f, TILE - 4.f}},
+            LanePos{1, COLS / 2},
+            PlayerTag{},
+            InputState{false,false,false,false,false,/*shoot=*/true,/*shotFired=*/false,false,false,false,false,false},
+            Health{9999},
+            Shield{0.f, 0},
+            Invincibility{999999},
+            DamageFlash{0}, ShieldFlash{0},
+            RapidFire{999999, 0},   // always rapid fire
+            DashState{0},
+            SpreadShot{999999},     // always spread shot (3 bullets per shot)
+            HopState{0, 10, 0.f},
+            BreatheState{0.f, 0.05f, 2.5f},
+            BlinkPhase{true, 0, 8});
+
+        // ── Shelters (3) ──
+        static constexpr float SHELTER_W  = TILE * 2.f - 4.f;
+        static constexpr float SHELTER_H  = TILE - 4.f;
+        static constexpr float SHELTER_XS[] = { 190.f, 512.f, 834.f };
+        for (float sx : SHELTER_XS)
+            Entity::create().addAll(
+                Transform{{sx, WIN_H - TILE / 2.f - 3 * TILE}, 0.f},
+                Drawable{{0, 0, 0, 0}, {SHELTER_W, SHELTER_H}},
+                Shelter{}, Health{50});  // tougher shelters so they last longer
+
+        // ── Global state ──
+        Entity::create().addAll(Transform{{0.f, 0.f}, 0.f}, FormationState{1, 0, 0});
+        Entity::create().addAll(
+            Transform{{0.f, 0.f}, 0.f},
+            GameStatus{false, false, false, 0, 0, 0, SDL_GetTicks(), 0},
+            ScreenShake{0},
+            ComboState{0, 0, 1},
+            SlowMo{0, 0},
+            SpeedScale{1.0f, 1.0f});
+        // NOTE: SelectState entity persists from constructor — don't create another here
+
+        _current_level     = 2;   // IndividualMove behaviour + level-2 bullet direction
+        _difficulty        = 1;
+        _camera_scroll     = 0.f;
+        _camera_grace      = 999999;
+        _score             = 0;
+        _bench_timer       = SDL_GetTicks();
+        _bench_frame       = 0;
+        _bench_max_speedup = 0;   // reset peak on every new benchmark run
+        _wave_enemy_count  = BENCH_ENEMY_ROWS * BENCH_ENEMY_COLS;
+    }
+
+    // Spawns a fresh batch of enemies (called when count drops below threshold)
+    static void spawn_bench_enemies(int howMany)
+    {
+        for (int i = 0; i < howMany; i++) {
+            const int row  = std::rand() % BENCH_ENEMY_ROWS;
+            const int col  = std::rand() % BENCH_ENEMY_COLS;
+            const int lane = 2 + row;
+            const int ecol = col + (Game::COLS - BENCH_ENEMY_COLS) / 2;
+            const float phase = (float)(std::rand() % 100) * 0.063f;
+            Entity::create().addAll(
+                Transform{{Game::TILE / 2.f + ecol * Game::TILE, Game::WIN_H - Game::TILE / 2.f - lane * Game::TILE}, 0.f},
+                Drawable{{0, 0, 0, 0}, {Game::TILE - 4.f, Game::TILE - 4.f}},
+                LanePos{lane, ecol}, EnemyTag{}, Health{20},
+                IndividualMove{SDL_GetTicks() + (Uint64)(std::rand() % 800)},
+                BreatheState{phase, 0.05f, 2.f});
+        }
+    }
+
+    void Game::bench_system() const
+    {
+        // ── Keep player permanently invincible and auto-shooting ──
+        static const Mask playerMask = MaskBuilder().set<PlayerTag>().set<InputState>().set<Invincibility>().build();
+        static const int  qP         = World::createQuery(playerMask);
+        for (Entity e = Entity::firstQ(qP); !e.eofQ(qP); e.nextQ(qP)) {
+            e.get<InputState>().shoot     = true;
+            e.get<InputState>().shotFired = false;
+            e.get<Invincibility>().frames = 999999;
+        }
+
+        // ── Prevent game-over / won flags from ending the benchmark ──
+        static const Mask gsMask = MaskBuilder().set<GameStatus>().build();
+        static const int  qGS    = World::createQuery(gsMask);
+        for (Entity e = Entity::firstQ(qGS); !e.eofQ(qGS); e.nextQ(qGS)) {
+            auto& gs = e.get<GameStatus>();
+            gs.gameOver = false;
+            gs.won      = false;
+        }
+
+        // ── Respawn enemies when count drops below threshold ──
+        static const Mask eMask = MaskBuilder().set<EnemyTag>().build();
+        static const int  qE    = World::createQuery(eMask);
+        int enemyCount = 0;
+        for (Entity e = Entity::firstQ(qE); !e.eofQ(qE); e.nextQ(qE)) enemyCount++;
+        if (enemyCount < BENCH_ENEMY_MIN) {
+            spawn_bench_enemies(BENCH_ENEMY_ROWS * BENCH_ENEMY_COLS - enemyCount);
+            _wave_enemy_count = BENCH_ENEMY_ROWS * BENCH_ENEMY_COLS;
+        }
+
+        // ── Also occasionally respawn shelters for more collision events ──
+        _bench_frame++;
+        if (_bench_frame % 600 == 0) {  // every ~10 seconds
+            static const Mask shMask = MaskBuilder().set<Shelter>().build();
+            for (Entity e = Entity::first(); !e.eof(); e.next())
+                if (e.test(shMask)) e.destroy();
+            static constexpr float SHELTER_W  = TILE * 2.f - 4.f;
+            static constexpr float SHELTER_H  = TILE - 4.f;
+            static constexpr float SHELTER_XS[] = { 190.f, 512.f, 834.f };
+            for (float sx : SHELTER_XS)
+                Entity::create().addAll(
+                    Transform{{sx, WIN_H - TILE / 2.f - 3 * TILE}, 0.f},
+                    Drawable{{0, 0, 0, 0}, {SHELTER_W, SHELTER_H}},
+                    Shelter{}, Health{50});
+        }
+    }
+
+    void Game::draw_benchmark_hud() const
+    {
+        const int bruteForce  = (World::maxId() + 1) * g_query_loop_starts;
+        const int queryActual = g_entity_checks;
+        const int speedup     = (queryActual > 0) ? bruteForce / queryActual : 0;
+        const int entities    = World::maxId() + 1;
+
+        // Track peak speedup across the entire benchmark session
+        if (speedup > _bench_max_speedup) _bench_max_speedup = speedup;
+
+        // ── Semi-transparent card in the top-right corner ──
+        // Card: 390 × 148 px, 20px from top-right edge
+        const float cx = (float)WIN_W - 410.f;
+        const float cy = 14.f;
+        const float cw = 390.f, ch = 148.f;
+
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(ren, 0, 0, 0, 200);
+        SDL_FRect bg = {cx, cy, cw, ch};
+        SDL_RenderFillRect(ren, &bg);
+        SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+
+        // Border
+        SDL_SetRenderDrawColor(ren, 100, 100, 200, 255);
+        SDL_FRect border = {cx - 1.f, cy - 1.f, cw + 2.f, ch + 2.f};
+        SDL_RenderFillRect(ren, &border);
+        SDL_SetRenderDrawColor(ren, 0, 0, 0, 200);
+        SDL_RenderFillRect(ren, &bg);
+
+        char buf[80];
+
+        // Title
+        SDL_SetRenderScale(ren, 1.5f, 1.5f);
+        SDL_SetRenderDrawColor(ren, 180, 180, 255, 255);
+        SDL_RenderDebugText(ren, (cx + 6.f) / 1.5f, (cy + 5.f) / 1.5f, "ECS ENTITY-QUERY BENCHMARK");
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        auto divider = [&](float y) {
+            SDL_SetRenderDrawColor(ren, 60, 60, 120, 255);
+            SDL_FRect d = {cx + 4.f, y, cw - 8.f, 1.f};
+            SDL_RenderFillRect(ren, &d);
+        };
+
+        divider(cy + 26.f);
+
+        // Green: query checks  (scale 1.4 → 32 chars × 8 × 1.4 = 358px  < 382px usable)
+        SDL_SetRenderScale(ren, 1.4f, 1.4f);
+        SDL_SetRenderDrawColor(ren, 80, 220, 80, 255);
+        SDL_snprintf(buf, sizeof(buf), "EntityQuery:  %5d checks/frame", queryActual);
+        SDL_RenderDebugText(ren, (cx + 6.f) / 1.4f, (cy + 32.f) / 1.4f, buf);
+
+        // Red: brute-force
+        SDL_SetRenderDrawColor(ren, 230, 70, 70, 255);
+        SDL_snprintf(buf, sizeof(buf), "Brute Force:  %5d checks/frame", bruteForce);
+        SDL_RenderDebugText(ren, (cx + 6.f) / 1.4f, (cy + 50.f) / 1.4f, buf);
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        divider(cy + 68.f);
+
+        // Yellow: current speedup + entity count
+        SDL_SetRenderScale(ren, 1.8f, 1.8f);
+        SDL_SetRenderDrawColor(ren, 255, 215, 40, 255);
+        SDL_snprintf(buf, sizeof(buf), "SPEEDUP: %dx", speedup);
+        SDL_RenderDebugText(ren, (cx + 6.f) / 1.8f, (cy + 75.f) / 1.8f, buf);
+        SDL_SetRenderDrawColor(ren, 180, 220, 255, 255);
+        SDL_snprintf(buf, sizeof(buf), "Entities: %d", entities);
+        SDL_RenderDebugText(ren, (cx + 190.f) / 1.8f, (cy + 75.f) / 1.8f, buf);
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        divider(cy + 98.f);
+
+        // Cyan: session peak
+        SDL_SetRenderScale(ren, 1.8f, 1.8f);
+        SDL_SetRenderDrawColor(ren, 0, 230, 220, 255);
+        SDL_snprintf(buf, sizeof(buf), "SESSION PEAK: %dx", _bench_max_speedup);
+        SDL_RenderDebugText(ren, (cx + 6.f) / 1.8f, (cy + 105.f) / 1.8f, buf);
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // Hint line at very bottom
+        SDL_SetRenderScale(ren, 1.2f, 1.2f);
+        SDL_SetRenderDrawColor(ren, 80, 80, 120, 255);
+        SDL_RenderDebugText(ren, (cx + 6.f) / 1.2f, (cy + ch - 16.f) / 1.2f, "ESC = back to menu  |  H = toggle HUD");
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+
+        // ── "BENCHMARK MODE" badge at top-left ──
+        SDL_SetRenderScale(ren, 2.2f, 2.2f);
+        SDL_SetRenderDrawColor(ren, 255, 160, 0, 255);
+        SDL_RenderDebugText(ren, 4.f, 2.f, "BENCHMARK MODE");
+        SDL_SetRenderScale(ren, 1.f, 1.f);
+    }
+
     // ──────────────────────────────── Systems ────────────────────────────────────
     void Game::explosion_system() const
     {
         static const Mask mask = MaskBuilder().set<Explosion>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(mask) && --e.get<Explosion>().frames <= 0) e.destroy();
+        static const int  q    = World::createQuery(mask);
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q))
+            if (--e.get<Explosion>().frames <= 0) e.destroy();
     }
 
     void Game::pickup_system() const
     {
         static const Mask pickupMask = MaskBuilder().set<Pickup>().set<Transform>().set<Drawable>().build();
         static const Mask playerMask = MaskBuilder().set<PlayerTag>().set<Transform>().set<Drawable>().set<Health>().build();
+        static const int  qPickup    = World::createQuery(pickupMask);
+        static const int  qPlayer    = World::createQuery(playerMask);
 
         auto overlaps = [](SDL_FPoint p1, SDL_FPoint s1, SDL_FPoint p2, SDL_FPoint s2) {
             return std::abs(p1.x - p2.x) < (s1.x + s2.x) * 0.5f &&
                    std::abs(p1.y - p2.y) < (s1.y + s2.y) * 0.5f;
         };
 
-        for (Entity pk = Entity::first(); !pk.eof(); pk.next()) {
-            if (!pk.test(pickupMask)) continue;
+        for (Entity pk = Entity::firstQ(qPickup); !pk.eofQ(qPickup); pk.nextQ(qPickup)) {
             const SDL_FPoint pp = pk.get<Transform>().p;
             const SDL_FPoint ps = pk.get<Drawable>().size;
             bool collected = false;
-            for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
-                if (!pl.test(playerMask)) continue;
+            for (Entity pl = Entity::firstQ(qPlayer); !pl.eofQ(qPlayer); pl.nextQ(qPlayer)) {
                 if (!overlaps(pp, ps, pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
                 const int type = pk.get<Pickup>().type;
                 collected = true;
@@ -455,7 +732,7 @@ namespace ci
                     sh.charges = std::min(sh.charges + 1, 3);
                 } else if (type == 2) {
                     pl.get<Health>().hp = std::min(pl.get<Health>().hp + 1, 5);
-                } else { // type == 3: spread shot
+                } else {
                     if (pl.has<SpreadShot>()) pl.get<SpreadShot>().frames = 300;
                 }
                 Entity::create().add(SoundEvent{4});
@@ -468,8 +745,8 @@ namespace ci
     void Game::combo_system() const
     {
         static const Mask mask = MaskBuilder().set<ComboState>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        static const int  q    = World::createQuery(mask);
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& cs = e.get<ComboState>();
             if (cs.timer > 0) cs.timer--;
             return;
@@ -479,9 +756,9 @@ namespace ci
     void Game::floating_text_system() const
     {
         static const Mask mask = MaskBuilder().set<FloatingText>().set<Transform>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
-            e.get<Transform>().p.y -= 1.2f;   // float upward in world space
+        static const int  q    = World::createQuery(mask);
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
+            e.get<Transform>().p.y -= 1.2f;
             if (--e.get<FloatingText>().frames <= 0) e.destroy();
         }
     }
@@ -489,8 +766,8 @@ namespace ci
     void Game::sound_system() const
     {
         static const Mask mask = MaskBuilder().set<SoundEvent>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        static const int  q    = World::createQuery(mask);
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             play_sfx(e.get<SoundEvent>().type);
             e.destroy();
         }
@@ -499,58 +776,51 @@ namespace ci
     void Game::hop_system() const
     {
         static const Mask mask = MaskBuilder().set<HopState>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        static const int  q    = World::createQuery(mask);
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q))
             if (e.get<HopState>().frames > 0) e.get<HopState>().frames--;
-        }
     }
 
     void Game::animate_system() const
     {
-        // Increments BreatheState.phase on every entity that has one.
-        // draw_system reads phase to compute a sin-based Y offset — no SDL_GetTicks()
-        // or wall-clock reads in the render path; all animation state lives in ECS.
         static const Mask mask = MaskBuilder().set<BreatheState>().build();
+        static const int  q    = World::createQuery(mask);
         constexpr float TWO_PI = 6.28318530f;
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& bs = e.get<BreatheState>();
             bs.phase += bs.speed;
-            if (bs.phase >= TWO_PI) bs.phase -= TWO_PI; // keep in [0, 2π) to avoid float drift
+            if (bs.phase >= TWO_PI) bs.phase -= TWO_PI;
         }
     }
 
     void Game::blink_system() const
     {
         static const Mask mask = MaskBuilder().set<BlinkPhase>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        static const int  q    = World::createQuery(mask);
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& bp = e.get<BlinkPhase>();
             if (++bp.counter >= bp.period) {
-                bp.counter  = 0;
-                bp.visible  = !bp.visible;
+                bp.counter = 0;
+                bp.visible = !bp.visible;
             }
         }
     }
 
     void Game::map_screen_system() const
     {
-        static const Mask mask = MaskBuilder().set<MapScreen>().build();
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        static const Mask mask     = MaskBuilder().set<MapScreen>().build();
+        static const int  q        = World::createQuery(mask);
+        static const Mask plInvMask= MaskBuilder().set<PlayerTag>().set<Invincibility>().build();
+        static const int  qPlInv   = World::createQuery(plInvMask);
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& ms = e.get<MapScreen>();
-            // Advance plane over first 180 frames (~3 s), then it rests at destination
             if (ms.planeT < 1.f)
                 ms.planeT = std::min(1.f, ms.planeT + 1.f / 180.f);
             if (--ms.framesLeft <= 0) {
                 e.destroy();
-                // Now start the level splash and make the player invincible through it
                 const int splashFrames = (_current_level == 4 ? 300 : 150);
                 Entity::create().add(LevelSplash{splashFrames});
-                static const Mask plInvMask = MaskBuilder()
-                    .set<PlayerTag>().set<Invincibility>().build();
-                for (Entity p = Entity::first(); !p.eof(); p.next()) {
-                    if (!p.test(plInvMask)) continue;
+                for (Entity p = Entity::firstQ(qPlInv); !p.eofQ(qPlInv); p.nextQ(qPlInv)) {
                     auto& inv = p.get<Invincibility>();
                     if (inv.frames < splashFrames) inv.frames = splashFrames;
                     break;
@@ -1416,13 +1686,22 @@ namespace ci
         SDL_FRect instrSep2 = {40.f, 622.f, (float)WIN_W - 80.f, 1.f};
         SDL_RenderFillRect(ren, &instrSep2);
 
-        // ── Blinking "PRESS SPACE TO PLAY"  (Y: 686) ──
-        // Pushed down slightly to leave breathing room after the larger instructions block.
+        // ── Blinking "PRESS SPACE TO PLAY"  (Y: 660) ──
         if ((SDL_GetTicks() / 500) % 2 == 0) {
-            // scale 2: "PRESS  SPACE  TO  PLAY" = 22×8×2=352px; centre x=(1024-352)/2=336; canvas=168
             SDL_SetRenderScale(ren, 2.f, 2.f);
             SDL_SetRenderDrawColor(ren, 255, 200, 50, 255);
-            SDL_RenderDebugText(ren, 168.f, 686.f / 2.f, "PRESS  SPACE  TO  PLAY");
+            SDL_RenderDebugText(ren, 168.f, 660.f / 2.f, "PRESS  SPACE  TO  PLAY");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
+
+        // ── "PRESS B → BENCHMARK" hint (Y: 688) ──
+        {
+            SDL_SetRenderScale(ren, 1.4f, 1.4f);
+            SDL_SetRenderDrawColor(ren, 255, 120, 30, 255);
+            // "B" key highlight
+            SDL_RenderDebugText(ren, 296.f, 688.f / 1.4f, "B");
+            SDL_SetRenderDrawColor(ren, 160, 160, 190, 255);
+            SDL_RenderDebugText(ren, 308.f, 688.f / 1.4f, "= Performance Benchmark");
             SDL_SetRenderScale(ren, 1.f, 1.f);
         }
     }
@@ -1431,9 +1710,9 @@ namespace ci
     void Game::input_system() const
     {
         static const Mask mask = MaskBuilder().set<PlayerTag>().set<InputState>().build();
+        static const int  q    = World::createQuery(mask);
         const bool* keys = SDL_GetKeyboardState(nullptr);
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& s    = e.get<InputState>();
             s.up       = keys[SDL_SCANCODE_UP];
             s.down     = keys[SDL_SCANCODE_DOWN];
@@ -1448,19 +1727,20 @@ namespace ci
 
     void Game::player_move_system() const
     {
-        static const Mask mask = MaskBuilder()
+        static const Mask mask      = MaskBuilder()
             .set<PlayerTag>().set<InputState>().set<LanePos>().set<Transform>().build();
         static const Mask enemyMask = MaskBuilder().set<EnemyTag>().build();
+        static const int  qPlayer   = World::createQuery(mask);
+        static const int  qEnemy    = World::createQuery(enemyMask);
 
         bool anyEnemy = false;
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(enemyMask)) { anyEnemy = true; break; }
+        for (Entity e = Entity::firstQ(qEnemy); !e.eofQ(qEnemy); e.nextQ(qEnemy))
+            { anyEnemy = true; break; }
 
         const int scrollTopLane = static_cast<int>((WIN_H - TILE / 2.f + _camera_scroll) / TILE);
         int max_lane = scrollTopLane - (anyEnemy ? 1 : 0);
 
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(qPlayer); !e.eofQ(qPlayer); e.nextQ(qPlayer)) {
             auto& s  = e.get<InputState>();
             auto& lp = e.get<LanePos>();
             auto& t  = e.get<Transform>();
@@ -1514,18 +1794,21 @@ namespace ci
         static const Mask mask    = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Transform>().set<Drawable>().build();
         static const Mask fsMask  = MaskBuilder().set<FormationState>().build();
         static const Mask ssMask  = MaskBuilder().set<SpeedScale>().build();
+        static const int  q       = World::createQuery(mask);
+        static const int  qFS     = World::createQuery(fsMask);
+        static const int  qSS     = World::createQuery(ssMask);
 
         float speedScale = 1.0f;
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(ssMask)) { speedScale = e.get<SpeedScale>().active; break; }
+        for (Entity e = Entity::firstQ(qSS); !e.eofQ(qSS); e.nextQ(qSS))
+            { speedScale = e.get<SpeedScale>().active; break; }
 
         // ── Level 2: independent per-enemy random movement ──
         if (_current_level == 2) {
             static const Mask indvMask = MaskBuilder()
                 .set<EnemyTag>().set<LanePos>().set<Transform>().set<IndividualMove>().build();
+            static const int  qIndv    = World::createQuery(indvMask);
             const Uint64 now = SDL_GetTicks();
-            for (Entity e = Entity::first(); !e.eof(); e.next()) {
-                if (!e.test(indvMask)) continue;
+            for (Entity e = Entity::firstQ(qIndv); !e.eofQ(qIndv); e.nextQ(qIndv)) {
                 auto& im = e.get<IndividualMove>();
                 if (now < im.nextMove) continue;
                 auto& lp = e.get<LanePos>();
@@ -1541,9 +1824,7 @@ namespace ci
         }
 
         // ── Levels 1, 3, 4: classic formation ──
-        Entity fsEnt = Entity::first();
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(fsMask)) { fsEnt = e; break; }
+        Entity fsEnt = Entity::firstQ(qFS);
         auto& fs = fsEnt.get<FormationState>();
 
         const Uint64 now = SDL_GetTicks();
@@ -1554,19 +1835,16 @@ namespace ci
         // Difficulty ramp within wave
         if (_wave_enemy_count > 0) {
             int remaining = 0;
-            for (Entity e = Entity::first(); !e.eof(); e.next())
-                if (e.test(mask)) remaining++;
+            for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) remaining++;
             move_ms = (Uint64)(move_ms * std::max(0.3f, (float)remaining / _wave_enemy_count));
         }
 
         if (now - fs.moveTimer < move_ms) return;
         fs.moveTimer = now;
 
-        // Check wall hit — uses both col-index guard (regular enemies) and
-        // a visual-size guard (large boss whose half-width exceeds TILE/2).
+        // Check wall hit
         bool hitEdge = false;
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             const int   col = e.get<LanePos>().col;
             const float hw  = e.get<Drawable>().size.x / 2.f;
             const float cx  = TILE / 2.f + col * TILE;
@@ -1579,17 +1857,14 @@ namespace ci
         if (hitEdge) {
             fs.dir = -fs.dir;
             if (_current_level == 4) {
-                // Role reversal: enemies advance UPWARD on edge hit
-                for (Entity e = Entity::first(); !e.eof(); e.next()) {
-                    if (!e.test(mask)) continue;
+                for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
                     e.get<LanePos>().lane++;
                     e.get<Transform>().p.y -= TILE;
                 }
             }
         }
 
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& lp = e.get<LanePos>();
             auto& t  = e.get<Transform>();
             lp.col += fs.dir;
@@ -1609,14 +1884,17 @@ namespace ci
         static const Mask enemyMask  = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Transform>().build();
         static const Mask fsMask     = MaskBuilder().set<FormationState>().build();
         static const Mask gsMask     = MaskBuilder().set<GameStatus>().build();
+        static const int  qPlayer    = World::createQuery(playerMask);
+        static const int  qEnemy     = World::createQuery(enemyMask);
+        static const int  qFS        = World::createQuery(fsMask);
+        static const int  qGS        = World::createQuery(gsMask);
 
         // Level 4: player shoots DOWN, enemies shoot UP; levels 1-3: opposite
         const float playerBulletDY = (_current_level == 4) ?  BULLET_SPEED : -BULLET_SPEED;
         const float enemyBulletDY  = (_current_level == 4) ? -BULLET_SPEED :  BULLET_SPEED;
 
         // Player shooting
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(playerMask)) continue;
+        for (Entity e = Entity::firstQ(qPlayer); !e.eofQ(qPlayer); e.nextQ(qPlayer)) {
             auto& s  = e.get<InputState>();
             auto& rf = e.get<RapidFire>();
 
@@ -1632,8 +1910,8 @@ namespace ci
 
             if (doShoot) {
                 // Track shots fired for accuracy stat
-                for (Entity g = Entity::first(); !g.eof(); g.next())
-                    if (g.test(gsMask)) { g.get<GameStatus>().shots++; break; }
+                for (Entity g = Entity::firstQ(qGS); !g.eofQ(qGS); g.nextQ(qGS))
+                    { g.get<GameStatus>().shots++; break; }
 
                 const SDL_FPoint p = e.get<Transform>().p;
                 const bool spread = e.has<SpreadShot>() && e.get<SpreadShot>().frames > 0;
@@ -1650,17 +1928,15 @@ namespace ci
         }
 
         // Enemy shooting
-        Entity fsEnt = Entity::first();
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(fsMask)) { fsEnt = e; break; }
+        Entity fsEnt = Entity::firstQ(qFS);
         auto& fs = fsEnt.get<FormationState>();
 
         const Uint64 now = SDL_GetTicks();
-        // Read SpeedScale for unified difficulty + SlowMo speed control
         static const Mask ssMask2 = MaskBuilder().set<SpeedScale>().build();
+        static const int  qSS2    = World::createQuery(ssMask2);
         float shootSpeedScale = 1.0f;
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(ssMask2)) { shootSpeedScale = e.get<SpeedScale>().active; break; }
+        for (Entity e = Entity::firstQ(qSS2); !e.eofQ(qSS2); e.nextQ(qSS2))
+            { shootSpeedScale = e.get<SpeedScale>().active; break; }
 
         Uint64 shoot_ms = (Uint64)(ENEMY_SHOOT_MS / shootSpeedScale);
         if (_current_level == 2) shoot_ms = (Uint64)(shoot_ms * 0.67f);
@@ -1669,23 +1945,16 @@ namespace ci
         if (now - fs.shootTimer < shoot_ms) return;
         fs.shootTimer = now;
 
-        // For level 4 role reversal: find the MAX lane (highest = closest to player)
-        // For other levels: find the MIN lane (lowest = closest to player)
         int targetLane = (_current_level == 4) ? 0 : LANES;
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(enemyMask)) continue;
+        for (Entity e = Entity::firstQ(qEnemy); !e.eofQ(qEnemy); e.nextQ(qEnemy)) {
             const int lane = e.get<LanePos>().lane;
             if (_current_level == 4) { if (lane > targetLane) targetLane = lane; }
             else                     { if (lane < targetLane) targetLane = lane; }
         }
 
-        // Count front-row enemies; front row shoots 3× more often
-        // (front row = targetLane for levels 1-3; targetLane for level 4)
-        // Build a weighted pool: front row has 3 slots, back rows have 1 slot each
         struct ShooterSlot { SDL_FPoint pos; };
         std::vector<ShooterSlot> pool;
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(enemyMask)) continue;
+        for (Entity e = Entity::firstQ(qEnemy); !e.eofQ(qEnemy); e.nextQ(qEnemy)) {
             const int lane   = e.get<LanePos>().lane;
             const int weight = (lane == targetLane) ? 3 : 1;
             for (int w = 0; w < weight; w++)
@@ -1709,13 +1978,14 @@ namespace ci
     {
         static const Mask mask   = MaskBuilder().set<BulletTag>().set<Transform>().set<Velocity>().build();
         static const Mask ssMask = MaskBuilder().set<SpeedScale>().build();
+        static const int  q      = World::createQuery(mask);
+        static const int  qSS    = World::createQuery(ssMask);
 
         float speedScale = 1.0f;
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(ssMask)) { speedScale = e.get<SpeedScale>().active; break; }
+        for (Entity e = Entity::firstQ(qSS); !e.eofQ(qSS); e.nextQ(qSS))
+            { speedScale = e.get<SpeedScale>().active; break; }
 
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& t         = e.get<Transform>();
             const auto& v   = e.get<Velocity>();
             const bool fromPl = e.get<BulletTag>().fromPlayer;
@@ -1732,13 +2002,14 @@ namespace ci
     {
         static const Mask mask   = MaskBuilder().set<Hazard>().set<Transform>().set<Drawable>().set<Velocity>().build();
         static const Mask ssMask = MaskBuilder().set<SpeedScale>().build();
+        static const int  q      = World::createQuery(mask);
+        static const int  qSS    = World::createQuery(ssMask);
 
         float speedScale = 1.0f;
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(ssMask)) { speedScale = e.get<SpeedScale>().active; break; }
+        for (Entity e = Entity::firstQ(qSS); !e.eofQ(qSS); e.nextQ(qSS))
+            { speedScale = e.get<SpeedScale>().active; break; }
 
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& t        = e.get<Transform>();
             const float dx = e.get<Velocity>().dx;
             const float hw = e.get<Drawable>().size.x / 2.f;
@@ -1757,9 +2028,10 @@ namespace ci
     {
         static const Mask mask   = MaskBuilder().set<PlayerTag>().set<InputState>().set<Shield>().build();
         static const Mask smMask = MaskBuilder().set<SlowMo>().build();
+        static const int  q      = World::createQuery(mask);
+        static const int  qSM    = World::createQuery(smMask);
 
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(mask)) continue;
+        for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& s  = e.get<InputState>();
             auto& sh = e.get<Shield>();
 
@@ -1784,8 +2056,7 @@ namespace ci
             if (e.has<DashState>() && e.get<DashState>().cooldown > 0) e.get<DashState>().cooldown--;
 
             // Bullet-time (SlowMo) activation + SpeedScale update
-            for (Entity sm = Entity::first(); !sm.eof(); sm.next()) {
-                if (!sm.test(smMask)) continue;
+            for (Entity sm = Entity::firstQ(qSM); !sm.eofQ(qSM); sm.nextQ(qSM)) {
                 auto& smc = sm.get<SlowMo>();
                 if (smc.frames   > 0) smc.frames--;
                 if (smc.cooldown > 0) smc.cooldown--;
@@ -1810,20 +2081,22 @@ namespace ci
     void Game::collision_system() const
     {
         static const Mask gsMask     = MaskBuilder().set<GameStatus>().set<ScreenShake>().set<ComboState>().build();
-        Entity gsEnt = Entity::first();
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(gsMask)) { gsEnt = e; break; }
+        static const Mask playerMask = MaskBuilder().set<PlayerTag>().set<Transform>().set<Drawable>().set<Health>().build();
+        static const Mask enemyMask  = MaskBuilder().set<EnemyTag>().set<Transform>().set<Drawable>().set<Health>().build();
+        static const Mask bulletMask = MaskBuilder().set<BulletTag>().set<Transform>().set<Drawable>().build();
+        static const Mask shelterMask= MaskBuilder().set<Shelter>().set<Transform>().set<Drawable>().set<Health>().build();
+        static const int  qGS        = World::createQuery(gsMask);
+        static const int  qPlayer    = World::createQuery(playerMask);
+        static const int  qEnemy     = World::createQuery(enemyMask);
+        static const int  qBullet    = World::createQuery(bulletMask);
+        static const int  qShelter   = World::createQuery(shelterMask);
+
+        Entity gsEnt = Entity::firstQ(qGS);
         auto& gs = gsEnt.get<GameStatus>();
         if (gs.gameOver || gs.won) return;
 
-        static const Mask playerMask  = MaskBuilder().set<PlayerTag>().set<Transform>().set<Drawable>().set<Health>().build();
-        static const Mask enemyMask   = MaskBuilder().set<EnemyTag>().set<Transform>().set<Drawable>().set<Health>().build();
-        static const Mask bulletMask  = MaskBuilder().set<BulletTag>().set<Transform>().set<Drawable>().build();
-        static const Mask shelterMask = MaskBuilder().set<Shelter>().set<Transform>().set<Drawable>().set<Health>().build();
-
         // Decrement invincibility + DamageFlash
-        for (Entity e = Entity::first(); !e.eof(); e.next()) {
-            if (!e.test(playerMask)) continue;
+        for (Entity e = Entity::firstQ(qPlayer); !e.eofQ(qPlayer); e.nextQ(qPlayer)) {
             if (e.has<Invincibility>() && e.get<Invincibility>().frames > 0) --e.get<Invincibility>().frames;
             if (e.has<DamageFlash>()   && e.get<DamageFlash>().frames   > 0) --e.get<DamageFlash>().frames;
             break;
@@ -1886,12 +2159,10 @@ namespace ci
         };
 
         // Bullet × shelter
-        for (Entity b = Entity::first(); !b.eof(); b.next()) {
-            if (!b.test(bulletMask)) continue;
+        for (Entity b = Entity::firstQ(qBullet); !b.eofQ(qBullet); b.nextQ(qBullet)) {
             const SDL_FPoint bp = b.get<Transform>().p;
             const SDL_FPoint bs = b.get<Drawable>().size;
-            for (Entity sh = Entity::first(); !sh.eof(); sh.next()) {
-                if (!sh.test(shelterMask)) continue;
+            for (Entity sh = Entity::firstQ(qShelter); !sh.eofQ(qShelter); sh.nextQ(qShelter)) {
                 if (!overlaps(bp, bs, sh.get<Transform>().p, sh.get<Drawable>().size)) continue;
                 b.destroy();
                 if (--sh.get<Health>().hp <= 0) sh.destroy();
@@ -1900,12 +2171,11 @@ namespace ci
         }
 
         // Player bullet × enemy
-        for (Entity b = Entity::first(); !b.eof(); b.next()) {
-            if (!b.test(bulletMask) || !b.get<BulletTag>().fromPlayer) continue;
+        for (Entity b = Entity::firstQ(qBullet); !b.eofQ(qBullet); b.nextQ(qBullet)) {
+            if (!b.get<BulletTag>().fromPlayer) continue;  // value check, not mask
             const SDL_FPoint bp = b.get<Transform>().p;
             const SDL_FPoint bs = b.get<Drawable>().size;
-            for (Entity en = Entity::first(); !en.eof(); en.next()) {
-                if (!en.test(enemyMask)) continue;
+            for (Entity en = Entity::firstQ(qEnemy); !en.eofQ(qEnemy); en.nextQ(qEnemy)) {
                 if (!overlaps(bp, bs, en.get<Transform>().p, en.get<Drawable>().size)) continue;
                 b.destroy();
                 gs.hits++;
@@ -1915,13 +2185,12 @@ namespace ci
             }
         }
 
-        // Enemy bullet × player  (tight hitbox — near-miss bullets should feel like misses)
-        for (Entity b = Entity::first(); !b.eof(); b.next()) {
-            if (!b.test(bulletMask) || b.get<BulletTag>().fromPlayer) continue;
+        // Enemy bullet × player  (tight hitbox)
+        for (Entity b = Entity::firstQ(qBullet); !b.eofQ(qBullet); b.nextQ(qBullet)) {
+            if (b.get<BulletTag>().fromPlayer) continue;  // value check
             const SDL_FPoint bp = b.get<Transform>().p;
             const SDL_FPoint bs = b.get<Drawable>().size;
-            for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
-                if (!pl.test(playerMask)) continue;
+            for (Entity pl = Entity::firstQ(qPlayer); !pl.eofQ(qPlayer); pl.nextQ(qPlayer)) {
                 if (!overlaps_tight(bp, bs, pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
                 if (pl.get<Shield>().timer > 0.f) { b.destroy(); break; }
                 b.destroy();
@@ -1930,12 +2199,11 @@ namespace ci
             }
         }
 
-        // Hazard × player  (tight hitbox — car must really be on your tile)
+        // Hazard × player  (tight hitbox)
         static const Mask hazardMask = MaskBuilder().set<Hazard>().set<Transform>().set<Drawable>().build();
-        for (Entity h = Entity::first(); !h.eof(); h.next()) {
-            if (!h.test(hazardMask)) continue;
-            for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
-                if (!pl.test(playerMask)) continue;
+        static const int  qHazard    = World::createQuery(hazardMask);
+        for (Entity h = Entity::firstQ(qHazard); !h.eofQ(qHazard); h.nextQ(qHazard)) {
+            for (Entity pl = Entity::firstQ(qPlayer); !pl.eofQ(qPlayer); pl.nextQ(qPlayer)) {
                 if (!overlaps_tight(h.get<Transform>().p, h.get<Drawable>().size,
                                     pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
                 hurt_player(pl);
@@ -1944,10 +2212,8 @@ namespace ci
         }
 
         // Enemy body × player
-        for (Entity en = Entity::first(); !en.eof(); en.next()) {
-            if (!en.test(enemyMask)) continue;
-            for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
-                if (!pl.test(playerMask)) continue;
+        for (Entity en = Entity::firstQ(qEnemy); !en.eofQ(qEnemy); en.nextQ(qEnemy)) {
+            for (Entity pl = Entity::firstQ(qPlayer); !pl.eofQ(qPlayer); pl.nextQ(qPlayer)) {
                 if (!overlaps(en.get<Transform>().p, en.get<Drawable>().size,
                               pl.get<Transform>().p, pl.get<Drawable>().size)) continue;
                 gs.gameOver = true; return;
@@ -1956,9 +2222,8 @@ namespace ci
 
         // Camera-scroll death (levels 1-3)
         if (_current_level != 4) {
-            for (Entity pl = Entity::first(); !pl.eof(); pl.next()) {
-                if (!pl.test(playerMask)) continue;
-                if (pl.get<Invincibility>().frames > 0) break;  // invulnerable during transition
+            for (Entity pl = Entity::firstQ(qPlayer); !pl.eofQ(qPlayer); pl.nextQ(qPlayer)) {
+                if (pl.get<Invincibility>().frames > 0) break;
                 const SDL_FPoint& pPos = pl.get<Transform>().p;
                 if (pPos.y + _camera_scroll + (pPos.x - WIN_W * 0.5f) * TILT > WIN_H + TILE / 2.f) {
                     gs.gameOver = true; return;
@@ -1967,19 +2232,19 @@ namespace ci
             }
         }
 
-        // Level 4: game over if any enemy reaches lane >= 8 (player zone)
+        // Level 4: game over if any enemy reaches lane >= 8
         if (_current_level == 4) {
             static const Mask lpEMask = MaskBuilder().set<EnemyTag>().set<LanePos>().build();
-            for (Entity en = Entity::first(); !en.eof(); en.next()) {
-                if (!en.test(lpEMask)) continue;
+            static const int  qLPE    = World::createQuery(lpEMask);
+            for (Entity en = Entity::firstQ(qLPE); !en.eofQ(qLPE); en.nextQ(qLPE)) {
                 if (en.get<LanePos>().lane >= 8) { gs.gameOver = true; return; }
             }
         }
 
         // Win condition
         bool anyEnemy = false;
-        for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(enemyMask)) { anyEnemy = true; break; }
+        for (Entity e = Entity::firstQ(qEnemy); !e.eofQ(qEnemy); e.nextQ(qEnemy))
+            { anyEnemy = true; break; }
         if (!anyEnemy) { gs.won = true; gs.waveEndTime = SDL_GetTicks(); }
     }
 
@@ -2757,12 +3022,34 @@ namespace ci
         static const Mask gsMask = MaskBuilder().set<GameStatus>().build();
 
         while (!quit) {
+            // ── Reset per-frame performance counters ──────────────────────────────
+            g_entity_checks     = 0;
+            g_query_loop_starts = 0;
+
             bool gameOver = false, won = false;
 
             if (_state == GameState::Select) {
                 select_input();
                 _select_scroll += 0.5f;  // animate starfield
                 if (_select_scroll > 10000.f) _select_scroll = 0.f;
+            } else if (_state == GameState::Benchmark) {
+                input_system();
+                bench_system();
+                player_move_system();
+                enemy_move_system();
+                shoot_system();
+                bullet_system();
+                hazard_move_system();
+                shield_system();
+                collision_system();
+                explosion_system();
+                pickup_system();
+                combo_system();
+                floating_text_system();
+                hop_system();
+                animate_system();
+                blink_system();
+                sound_system();
             } else if (_state == GameState::Playing) {
                 for (Entity e = Entity::first(); !e.eof(); e.next())
                     if (e.test(gsMask)) { gameOver = e.get<GameStatus>().gameOver; won = e.get<GameStatus>().won; break; }
@@ -2889,6 +3176,9 @@ namespace ci
                 draw_pause();
             } else if (_state == GameState::MapScreen) {
                 draw_map_screen();
+            } else if (_state == GameState::Benchmark) {
+                draw_system();
+                if (_show_perf_hud) draw_benchmark_hud();
             } else {
                 draw_system();
                 {
@@ -2897,6 +3187,7 @@ namespace ci
                         if (e.test(splashMask)) { draw_level_splash(); break; }
                 }
                 if (gameOver || (won && _current_level == 4)) endgame_draw();
+
             }
             SDL_RenderPresent(ren);
 
@@ -2910,7 +3201,12 @@ namespace ci
                 if (ev.type == SDL_EVENT_KEY_DOWN) {
                     const SDL_Scancode sc = ev.key.scancode;
                     if (sc == SDL_SCANCODE_ESCAPE) {
-                        if      (_state == GameState::Playing) _state = GameState::Paused;
+                        if      (_state == GameState::Benchmark) {
+                            clear_game_entities();
+                            _select_last_char = -1;  // triggers anthem replay on next select_input()
+                            _state = GameState::Select;
+                        }
+                        else if (_state == GameState::Playing) _state = GameState::Paused;
                         else if (_state == GameState::Paused)  _state = GameState::Playing;
                         else                                    quit   = true;
                     }
@@ -2930,6 +3226,13 @@ namespace ci
                         Entity::create().add(MapScreen{420, 1.f, 0, 0}); // plane already at start city
                         _state = GameState::MapScreen;
                     }
+                    if (sc == SDL_SCANCODE_B && _state == GameState::Select) {
+                        if (audio_stream) SDL_ClearAudioStream(audio_stream); // stop anthem
+                        spawn_benchmark();
+                        _state = GameState::Benchmark;
+                    }
+                    if (sc == SDL_SCANCODE_H)
+                        _show_perf_hud = !_show_perf_hud;
                     if (sc == SDL_SCANCODE_R && (gameOver || won)) {
                         _current_level = 1;
                         reset();

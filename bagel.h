@@ -45,6 +45,8 @@ namespace bagel
 		static void ensure(int) {}
 		void push(const T& val) { _arr[_size++] = val; }
 		T pop() { return _arr[--_size]; }
+		/// Swap-remove: O(1) unordered remove by index.
+		void remove(int idx) { _arr[idx] = _arr[--_size]; }
 
 		T& operator[](int idx) { return _arr[idx]; }
 		const T& operator[](int idx) const { return _arr[idx]; }
@@ -210,17 +212,85 @@ namespace bagel
 		static inline const Mask::bit_type	Bit = Mask::bit(Index);
 	};
 
+	// ─── EntityQuery ─────────────────────────────────────────────────────────────
+	// Pre-filtered entity list for one component mask.
+	// The World keeps these up-to-date automatically via addComponent / delComponent
+	// / deleteEntity hooks, so systems iterate only their matching entities.
+	static constexpr int MaxQueryEntities = 512;
+	static constexpr int MaxQueries       = 64;
+	struct EntityQuery {
+		Mask                                 filter{};
+		StaticBag<id_type, MaxQueryEntities> entities{};
+		int                                  curr = 0;
+	};
+
+	// Per-frame performance counters — compile with -DBAGEL_PERF=0 to remove all overhead.
+#ifndef BAGEL_PERF
+#  define BAGEL_PERF 1
+#endif
+#if BAGEL_PERF
+	inline int g_entity_checks     = 0;  // entity iterations via queries  (new method)
+	inline int g_query_loop_starts = 0;  // number of query-loop starts    (× maxId = old-method cost)
+#  define BAGEL_COUNT(x) (x)
+#else
+	inline constexpr int g_entity_checks     = 0;
+	inline constexpr int g_query_loop_starts = 0;
+#  define BAGEL_COUNT(x) ((void)0)
+#endif
+
 	/// Main class of ECS world
 	/// @brief ECS world
 	class World final : public NoInstance
 	{
-		static inline Bag<Mask,InitialEntities>		_masks;
-		static inline Bag<id_type,IdBagSize>		_ids;
-		static inline id_type _maxId = -1;
+		static inline Bag<Mask,InitialEntities>		         _masks;
+		static inline Bag<id_type,IdBagSize>		         _ids;
+		static inline id_type                                _maxId = -1;
+		static inline StaticBag<EntityQuery, MaxQueries>     _queries{};
 		static auto& _deleters() {
 			static Bag<DeleteFunc,MaxComponents> _deleters;
 			return _deleters;
 		}
+
+		// ── Internal query-maintenance hooks ─────────────────────────────────────
+		// Called after setting the bit in addComponent: add entity to queries it
+		// newly satisfies.
+		static void _onAdd(ent_type ent, Mask oldMask) {
+			const Mask newMask = _masks[ent.id];
+			for (int qi = 0; qi < _queries.size(); qi++)
+				if (!oldMask.test(_queries[qi].filter) && newMask.test(_queries[qi].filter))
+					_queries[qi].entities.push(ent.id);
+		}
+		// Called after clearing the bit in delComponent: remove entity from queries
+		// it no longer satisfies.
+		static void _onDel(ent_type ent, Mask oldMask) {
+			const Mask newMask = _masks[ent.id];
+			for (int qi = 0; qi < _queries.size(); qi++) {
+				if (oldMask.test(_queries[qi].filter) && !newMask.test(_queries[qi].filter)) {
+					EntityQuery& eq = _queries[qi];
+					for (int i = 0; i < eq.entities.size(); i++)
+						if (eq.entities[i] == ent.id) { eq.entities.remove(i); break; }
+				}
+			}
+		}
+		// Called before clearing the mask in deleteEntity: remove entity from every
+		// query (handles ID reuse — new entity with same ID starts clean).
+		// Called before clearing the mask — removes entity from every query.
+		// If the deletion is of the entity currently at the iteration cursor we
+		// decrement curr so that nextQ() re-visits that slot (which now holds the
+		// entity swapped in from the end) and does not skip it.
+		static void _onDelete(ent_type ent) {
+			for (int qi = 0; qi < _queries.size(); qi++) {
+				EntityQuery& eq = _queries[qi];
+				for (int i = 0; i < eq.entities.size(); i++) {
+					if (eq.entities[i] == ent.id) {
+						eq.entities.remove(i);
+						if (i == eq.curr) --eq.curr; // back up so nextQ covers swapped slot
+						break;
+					}
+				}
+			}
+		}
+
 	public:
 		/// Creates a new entity in the ECS world
 		/// @return The new entity
@@ -233,6 +303,7 @@ namespace bagel
 		/// Deletes the given entity from the ECS world
 		/// @param ent The entity to delete
 		static void deleteEntity(ent_type ent) {
+			_onDelete(ent);                    // remove from all queries before mask is cleared
 			if constexpr (CallbackOnDelete) {
 				Mask m = _masks[ent.id];
 				int ctz;
@@ -255,13 +326,17 @@ namespace bagel
 		}
 		template <class T>
 		static void addComponent(ent_type ent, const T& comp) {
+			const Mask oldMask = _masks[ent.id];
 			_masks[ent.id].set(Component<T>::Bit);
-			Storage<T>::type::add(ent,comp);
+			Storage<T>::type::add(ent, comp);
+			_onAdd(ent, oldMask);              // update queries
 		}
 		template <class T>
 		static void delComponent(ent_type ent) {
+			const Mask oldMask = _masks[ent.id];
 			_masks[ent.id].clear(Component<T>::Bit);
 			Storage<T>::type::del(ent);
+			_onDel(ent, oldMask);              // update queries
 		}
 		template <class T>
 		static void registerDeleter(DeleteFunc func) {
@@ -271,6 +346,32 @@ namespace bagel
 		}
 
 		static id_type maxId() { return _maxId; }
+
+		// ── EntityQuery public API ────────────────────────────────────────────────
+		/// Register a filtered entity list. Call once per system (static local).
+		/// @return Query index — pass to Entity::firstQ / eofQ / nextQ.
+		static int createQuery(Mask filter) {
+			EntityQuery q;
+			q.filter = filter;
+			for (id_type id = 0; id <= _maxId; id++)
+				if (_masks[id].test(filter)) q.entities.push(id);
+			const int idx = _queries.size();
+			_queries.push(q);
+			return idx;
+		}
+		/// Remove any stale entities (mask no longer matches). Called automatically
+		/// by Entity::firstQ — rarely needed to call manually.
+		static void cleanQuery(int qi) {
+			EntityQuery& eq = _queries[qi];
+			int i = 0;
+			while (i < eq.entities.size())
+				if (_masks[eq.entities[i]].test(eq.filter)) ++i;
+				else                                          eq.entities.remove(i);
+		}
+		static void    queryRewind  (int qi) { _queries[qi].curr = 0; }
+		static bool    queryEof     (int qi) { return _queries[qi].curr >= _queries[qi].entities.size(); }
+		static void    queryNext    (int qi) { ++_queries[qi].curr; }
+		static id_type queryCurrent (int qi) { return _queries[qi].entities[_queries[qi].curr]; }
 	};
 
 	template <class T> struct Register
@@ -331,6 +432,26 @@ namespace bagel
 		static Entity first() { return Entity{{0}}; }
 		bool eof() const { return _ent.id > World::maxId(); }
 		void next() { ++_ent.id; }
+
+		// ── Query-based iteration (O(matched) instead of O(all)) ─────────────────
+		/// Start iterating a query: cleans stale entries, rewinds, returns first entity.
+		/// Usage: for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) { ... }
+		static Entity firstQ(int qi) {
+			World::cleanQuery(qi);
+			World::queryRewind(qi);
+			BAGEL_COUNT(++g_query_loop_starts);
+			if (World::queryEof(qi)) return Entity{ent_type{World::maxId()+1}}; // empty sentinel
+			BAGEL_COUNT(++g_entity_checks);
+			return Entity{ent_type{World::queryCurrent(qi)}};
+		}
+		bool eofQ(int qi) const { return World::queryEof(qi); }
+		void nextQ(int qi) {
+			World::queryNext(qi);
+			if (!World::queryEof(qi)) {
+				BAGEL_COUNT(++g_entity_checks);
+				_ent = ent_type{World::queryCurrent(qi)};
+			}
+		}
 	private:
 		ent_type _ent;
 	};
