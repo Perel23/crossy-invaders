@@ -231,18 +231,19 @@ namespace ci
             }
         }
 
-        // ← → hint + character counter below carousel
+        // ← → hint + character counter — single centered row between carousel and difficulty
         {
             char cntbuf[16];
             SDL_snprintf(cntbuf, sizeof(cntbuf), "%d / %d", selected + 1, NUM_CHARS);
-            // Navigation arrows
+            // Compose one line: "<  LEFT / RIGHT  >    1 / 12"
+            char linebuf[48];
+            SDL_snprintf(linebuf, sizeof(linebuf), "<  LEFT / RIGHT  >    %s", cntbuf);
             SDL_SetRenderScale(ren, 1.2f, 1.2f);
+            const float lineW = (float)SDL_strlen(linebuf) * 8.f * 1.2f;
+            const float lineX = ((float)WIN_W - lineW) / 2.f;
+            // Vertically centred in the 38px gap (Y 402–440): midpoint = 421, text height ~10px → top at 416
             SDL_SetRenderDrawColor(ren, 140, 140, 160, 255);
-            SDL_RenderDebugText(ren, 290.f, 414.f / 1.2f, "<  LEFT / RIGHT  >");
-            // Counter centred
-            SDL_SetRenderDrawColor(ren, 200, 200, 80, 255);
-            const float cntW = (float)SDL_strlen(cntbuf) * 8.f * 1.2f;
-            SDL_RenderDebugText(ren, ((float)WIN_W / 2.f - cntW / 2.f) / 1.2f, 430.f / 1.2f, cntbuf);
+            SDL_RenderDebugText(ren, lineX / 1.2f, 416.f / 1.2f, linebuf);
             SDL_SetRenderScale(ren, 1.f, 1.f);
         }
 
