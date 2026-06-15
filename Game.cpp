@@ -48,6 +48,8 @@ namespace ci
             hearts_texture        = loadTex("res/hearts_spreadsheet.png");
             iron_dome_texture     = loadTex("res/iron_dome.png");
             iron_dome_icon_texture= loadTex("res/iron_dome_icon.png");
+            bibi_bullet_tex       = loadTex("res/mahal.jpg");
+            sara_bullet_tex       = loadTex("res/snowspray.png");
         }
 
         // Audio
@@ -70,6 +72,8 @@ namespace ci
         if (hearts_texture)         SDL_DestroyTexture(hearts_texture);
         if (iron_dome_texture)      SDL_DestroyTexture(iron_dome_texture);
         if (iron_dome_icon_texture) SDL_DestroyTexture(iron_dome_icon_texture);
+        if (bibi_bullet_tex)        SDL_DestroyTexture(bibi_bullet_tex);
+        if (sara_bullet_tex)        SDL_DestroyTexture(sara_bullet_tex);
         for (int i = 0; i < NUM_CHARS; i++)
             if (char_select_tex[i]) SDL_DestroyTexture(char_select_tex[i]);
         for (int i = 0; i < 4; i++)

@@ -54,8 +54,11 @@ namespace ci
         static const Mask lpEMask2       = MaskBuilder().set<EnemyTag>().set<LanePos>().set<Health>().build();
         static const Mask worldMask      = MaskBuilder().set<Transform>().build();
         static const Mask wallDrwMask    = MaskBuilder().set<WallTag>().set<Transform>().set<Drawable>().build();
-        static const Mask trumpBulletMsk = MaskBuilder().set<TrumpBulletTag>().build();
-        static const Mask putinBulletMsk = MaskBuilder().set<PutinBulletTag>().build();
+        static const Mask trumpBulletMsk   = MaskBuilder().set<TrumpBulletTag>().build();
+        static const Mask putinBulletMsk   = MaskBuilder().set<PutinBulletTag>().build();
+        static const Mask benGvirBulletMsk = MaskBuilder().set<BenGvirBulletTag>().build();
+        static const Mask bibiBulletMsk    = MaskBuilder().set<BibiBulletTag>().build();
+        static const Mask saraBulletMsk    = MaskBuilder().set<SaraBulletTag>().build();
 
         // Diagonal camera: horizontal offset coupled to vertical camera scroll
         const float camX = _camera_scroll * TILT;
@@ -271,6 +274,47 @@ namespace ci
                     SDL_FRect exh = {cx - 3.f, bot - 2.f, 6.f, 5.f};
                     SDL_RenderFillRect(ren, &exh);
                     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+                } else if (fp && e.test(bibiBulletMsk)) {
+                    // Bibi — mahal.jpg image bullet
+                    if (bibi_bullet_tex)
+                        SDL_RenderTexture(ren, bibi_bullet_tex, nullptr, &dest);
+                    else {
+                        SDL_SetRenderDrawColor(ren, 0, 100, 200, 255);
+                        SDL_RenderFillRect(ren, &dest);
+                    }
+                } else if (fp && e.test(saraBulletMsk)) {
+                    // Sara — snowspray.png image bullet
+                    if (sara_bullet_tex)
+                        SDL_RenderTexture(ren, sara_bullet_tex, nullptr, &dest);
+                    else {
+                        SDL_SetRenderDrawColor(ren, 180, 220, 255, 255);
+                        SDL_RenderFillRect(ren, &dest);
+                    }
+                } else if (fp && e.test(benGvirBulletMsk)) {
+                    // Ben Gvir's Torah scroll — etz chaim handles + parchment body + text lines
+                    const float cx  = dest.x + dest.w * 0.5f;
+                    const float top = dest.y;
+                    const float bot = dest.y + dest.h;
+                    const float hw  = dest.w * 0.5f;
+
+                    // Top & bottom etz chaim handles (dark wood)
+                    SDL_SetRenderDrawColor(ren, 101, 67, 33, 255);
+                    SDL_FRect topHandle = {cx - hw * 1.8f, top,        hw * 3.6f, 3.f};
+                    SDL_FRect botHandle = {cx - hw * 1.8f, bot - 3.f,  hw * 3.6f, 3.f};
+                    SDL_RenderFillRect(ren, &topHandle);
+                    SDL_RenderFillRect(ren, &botHandle);
+
+                    // Parchment scroll body
+                    SDL_SetRenderDrawColor(ren, 240, 210, 150, 255);
+                    SDL_FRect scroll = {cx - hw, top + 3.f, dest.w, dest.h - 6.f};
+                    SDL_RenderFillRect(ren, &scroll);
+
+                    // Hebrew text lines
+                    SDL_SetRenderDrawColor(ren, 70, 40, 10, 255);
+                    for (int line = 0; line < 3; line++) {
+                        SDL_FRect ln = {cx - hw + 1.f, top + 5.f + line * 3.5f, dest.w - 2.f, 1.f};
+                        SDL_RenderFillRect(ren, &ln);
+                    }
                 } else {
                     SDL_SetRenderDrawColor(ren, 255, fp ? 255 : 140, 0, 255);
                     SDL_RenderFillRect(ren, &dest);

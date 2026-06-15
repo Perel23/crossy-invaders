@@ -83,6 +83,8 @@ namespace ci
 		mutable SDL_Texture*	hearts_texture     = nullptr;
 		mutable SDL_Texture*	iron_dome_texture      = nullptr;
 		mutable SDL_Texture*	iron_dome_icon_texture = nullptr;
+		mutable SDL_Texture*	bibi_bullet_tex        = nullptr;
+		mutable SDL_Texture*	sara_bullet_tex        = nullptr;
 		mutable int _current_level    = 1;
 		mutable int _score            = 0;
 		mutable int _high_score       = 0;

@@ -46,6 +46,9 @@ namespace ci
 	struct WallTag        { int frames; };        // Trump's "Build the Wall" — frames remaining
 	struct TrumpBulletTag {};                    // marks B2 bomber projectiles
 	struct PutinBulletTag {};                    // marks nuclear missile projectiles
+	struct BenGvirBulletTag {};                  // marks Torah scroll projectiles
+	struct BibiBulletTag    {};                  // marks mahal.jpg image projectiles
+	struct SaraBulletTag    {};                  // marks snowspray.png image projectiles
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;
@@ -151,4 +154,13 @@ template <> struct bagel::Storage<ci::TrumpBulletTag> final : bagel::NoInstance 
 };
 template <> struct bagel::Storage<ci::PutinBulletTag> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::PutinBulletTag>;
+};
+template <> struct bagel::Storage<ci::BenGvirBulletTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::BenGvirBulletTag>;
+};
+template <> struct bagel::Storage<ci::BibiBulletTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::BibiBulletTag>;
+};
+template <> struct bagel::Storage<ci::SaraBulletTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::SaraBulletTag>;
 };

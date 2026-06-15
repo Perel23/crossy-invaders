@@ -350,6 +350,51 @@ namespace ci
                                  BulletTag{true}, Velocity{0.f, playerBulletDY});
                         b.add(PutinBulletTag{});
                     }
+                } else if (charId == 9) {
+                    // Sara — snowspray.png image; respects SpreadShot and RapidFire
+                    if (spread) {
+                        for (float dx : {-2.5f, 0.f, 2.5f}) {
+                            Entity b = Entity::create();
+                            b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{36.f,36.f}},
+                                     BulletTag{true}, Velocity{dx, playerBulletDY});
+                            b.add(SaraBulletTag{});
+                        }
+                    } else {
+                        Entity b = Entity::create();
+                        b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{36.f,36.f}},
+                                 BulletTag{true}, Velocity{0.f, playerBulletDY});
+                        b.add(SaraBulletTag{});
+                    }
+                } else if (charId == 1) {
+                    // Bibi — mahal.jpg image; respects SpreadShot and RapidFire
+                    if (spread) {
+                        for (float dx : {-2.5f, 0.f, 2.5f}) {
+                            Entity b = Entity::create();
+                            b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{36.f,36.f}},
+                                     BulletTag{true}, Velocity{dx, playerBulletDY});
+                            b.add(BibiBulletTag{});
+                        }
+                    } else {
+                        Entity b = Entity::create();
+                        b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{36.f,36.f}},
+                                 BulletTag{true}, Velocity{0.f, playerBulletDY});
+                        b.add(BibiBulletTag{});
+                    }
+                } else if (charId == 2) {
+                    // Ben Gvir — Torah scroll; respects SpreadShot and RapidFire
+                    if (spread) {
+                        for (float dx : {-2.5f, 0.f, 2.5f}) {
+                            Entity b = Entity::create();
+                            b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{12.f,16.f}},
+                                     BulletTag{true}, Velocity{dx, playerBulletDY});
+                            b.add(BenGvirBulletTag{});
+                        }
+                    } else {
+                        Entity b = Entity::create();
+                        b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{12.f,16.f}},
+                                 BulletTag{true}, Velocity{0.f, playerBulletDY});
+                        b.add(BenGvirBulletTag{});
+                    }
                 } else if (spread) {
                     for (float dx : {-2.5f, 0.f, 2.5f})
                         Entity::create().addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{6.f,14.f}},
