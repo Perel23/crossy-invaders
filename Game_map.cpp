@@ -72,7 +72,12 @@ namespace ci
             {880.f, 345.f, "TEHRAN"},
         };
         const WayPoint* route    = (selected == 0) ? trump_route : bibi_route;
-        const char*     charName = (selected == 0) ? "TRUMP" : "BIBI";
+        static const char* const char_names[Game::NUM_CHARS] = {
+            "TRUMP", "BIBI", "BEN-GVIR", "ZELENSKY",
+            "PUTIN", "OBAMA", "EMINEM", "MADONNA",
+            "M. JACKSON", "SARA", "STALIN", "YOAMASHIT"
+        };
+        const char* charName = char_names[selected < Game::NUM_CHARS ? selected : 0];
 
         // Helper: arc Y offset — sine curve so plane rises and falls between cities
         auto arcY = [](float t) { return -std::sin(t * 3.14159f) * 90.f; };

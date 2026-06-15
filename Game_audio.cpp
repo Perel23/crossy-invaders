@@ -71,18 +71,12 @@ namespace ci
                 }
                 break;
             }
-            case 19: {  // "WRONG!" — buzzy descending block (Trump wall hit)
-                int n = (int)(SR * 0.20f); buf.resize(n);
-                for (int i = 0; i < n; i++) {
-                    const float t = (float)i / n;
-                    const float f = 380.f - 180.f * t;      // sweep 380→200 Hz
-                    const float v = 0.35f * (1.f - t*0.7f); // fast fade
-                    buf[i] = (Sint16)(32767 * v * (
-                        std::sin(2*M_PI*f*i/SR) +
-                        0.5f  * std::sin(4*M_PI*f*i/SR) +
-                        0.25f * std::sin(6*M_PI*f*i/SR)
-                    ) / 1.75f);
-                }
+            case 19: {  // "WRONG!" — low blaring tone when wall blocks a bullet
+                tone(220.f, 0.28f, 0.40f, 0.05f);
+                break;
+            }
+            case 20: {  // wall-spawn thud
+                tone(110.f, 0.18f, 0.35f, 0.0f);
                 break;
             }
             case 7:  case 8:  case 9:  case 10:

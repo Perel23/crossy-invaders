@@ -317,11 +317,11 @@ namespace ci
                     { g.get<GameStatus>().shots++; break; }
 
                 const SDL_FPoint p = e.get<Transform>().p;
-                const bool isTrump = e.has<CharacterID>() && e.get<CharacterID>().id == 0;
+                const int charId   = e.has<CharacterID>() ? e.get<CharacterID>().id : -1;
                 const bool spread  = e.has<SpreadShot>() && e.get<SpreadShot>().frames > 0;
 
-                if (isTrump) {
-                    // B2 Spirit bomber — wide projectile; respects SpreadShot pickup
+                if (charId == 0) {
+                    // Trump — B2 Spirit bomber; respects SpreadShot pickup
                     if (spread) {
                         for (float dx : {-2.5f, 0.f, 2.5f}) {
                             Entity b = Entity::create();
@@ -334,6 +334,21 @@ namespace ci
                         b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{36.f,12.f}},
                                  BulletTag{true}, Velocity{0.f, playerBulletDY});
                         b.add(TrumpBulletTag{});
+                    }
+                } else if (charId == 4) {
+                    // Putin — nuclear missile; respects SpreadShot and RapidFire
+                    if (spread) {
+                        for (float dx : {-2.5f, 0.f, 2.5f}) {
+                            Entity b = Entity::create();
+                            b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{10.f,20.f}},
+                                     BulletTag{true}, Velocity{dx, playerBulletDY});
+                            b.add(PutinBulletTag{});
+                        }
+                    } else {
+                        Entity b = Entity::create();
+                        b.addAll(Transform{p, 0.f}, Drawable{{0,0,0,0},{10.f,20.f}},
+                                 BulletTag{true}, Velocity{0.f, playerBulletDY});
+                        b.add(PutinBulletTag{});
                     }
                 } else if (spread) {
                     for (float dx : {-2.5f, 0.f, 2.5f})
@@ -476,7 +491,7 @@ namespace ci
                         Transform{{p.x, p.y + wallOffY}, 0.f},
                         Drawable{{0,0,0,0}, {64.f, 128.f}},
                         WallTag{300});
-                    Entity::create().add(SoundEvent{19});
+                    Entity::create().add(SoundEvent{20}); // wall-spawn thud
                 }
             } else if (!s.activate) {
                 s.activateFired = false;

@@ -55,6 +55,7 @@ namespace ci
         static const Mask worldMask      = MaskBuilder().set<Transform>().build();
         static const Mask wallDrwMask    = MaskBuilder().set<WallTag>().set<Transform>().set<Drawable>().build();
         static const Mask trumpBulletMsk = MaskBuilder().set<TrumpBulletTag>().build();
+        static const Mask putinBulletMsk = MaskBuilder().set<PutinBulletTag>().build();
 
         // Diagonal camera: horizontal offset coupled to vertical camera scroll
         const float camX = _camera_scroll * TILT;
@@ -227,6 +228,48 @@ namespace ci
                     SDL_SetRenderDrawColor(ren, 120, 200, 255, 160);
                     SDL_FRect glow = {cx - 3.f, bas - 3.f, 6.f, 4.f};
                     SDL_RenderFillRect(ren, &glow);
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+                } else if (fp && e.test(putinBulletMsk)) {
+                    // Putin's nuclear missile: red warhead + olive body + fins + exhaust
+                    const float cx  = dest.x + dest.w * 0.5f;
+                    const float top = dest.y;
+                    const float bot = dest.y + dest.h;
+                    const float hw  = dest.w * 0.5f;
+
+                    // Warhead — red triangle
+                    SDL_Vertex nose[3] = {
+                        {{cx,        top},        {220, 30,  30, 255}, {0,0}},
+                        {{cx - hw,   top + 5.f},  {180, 30,  30, 255}, {0,0}},
+                        {{cx + hw,   top + 5.f},  {180, 30,  30, 255}, {0,0}},
+                    };
+                    SDL_RenderGeometry(ren, nullptr, nose, 3, nullptr, 0);
+
+                    // Body — olive green
+                    SDL_SetRenderDrawColor(ren, 80, 100, 50, 255);
+                    SDL_FRect body = {cx - hw, top + 5.f, dest.w, bot - top - 9.f};
+                    SDL_RenderFillRect(ren, &body);
+
+                    // Left fin
+                    SDL_Vertex lf[3] = {
+                        {{cx - hw,        bot - 5.f}, {60, 80, 35, 255}, {0,0}},
+                        {{cx - hw * 2.5f, bot},       {50, 70, 30, 255}, {0,0}},
+                        {{cx - hw,        bot},        {60, 80, 35, 255}, {0,0}},
+                    };
+                    SDL_RenderGeometry(ren, nullptr, lf, 3, nullptr, 0);
+
+                    // Right fin
+                    SDL_Vertex rf[3] = {
+                        {{cx + hw,        bot - 5.f}, {60, 80, 35, 255}, {0,0}},
+                        {{cx + hw,        bot},        {60, 80, 35, 255}, {0,0}},
+                        {{cx + hw * 2.5f, bot},        {50, 70, 30, 255}, {0,0}},
+                    };
+                    SDL_RenderGeometry(ren, nullptr, rf, 3, nullptr, 0);
+
+                    // Exhaust glow
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                    SDL_SetRenderDrawColor(ren, 255, 130, 30, 180);
+                    SDL_FRect exh = {cx - 3.f, bot - 2.f, 6.f, 5.f};
+                    SDL_RenderFillRect(ren, &exh);
                     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
                 } else {
                     SDL_SetRenderDrawColor(ren, 255, fp ? 255 : 140, 0, 255);
