@@ -9,7 +9,16 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 add_executable(crossy_invaders
     main.cpp
     Game.cpp
+    Game_spawn.cpp
+    Game_benchmark.cpp
+    Game_audio.cpp
+    Game_systems.cpp
+    Game_map.cpp
+    Game_select.cpp
+    Game_draw.cpp
+    Game_screens.cpp
     Game.h
+    Game_constants.h
     Components.h
     bagel.h)
 

@@ -42,6 +42,9 @@ namespace ci
 	using HopState     = struct { int frames; int maxFrames; float hopDX; };
 	using BreatheState = struct { float phase; float speed; float amplitude; };
 	using BlinkPhase   = struct { bool visible; int counter; int period; };
+	struct CharacterID   { int id; };            // which character was selected (0=Trump, etc.)
+	struct WallTag       { int frames; };        // Trump's "Build the Wall" — frames remaining
+	struct TrumpBulletTag {};                    // marks B2 bomber projectiles
 }
 template <> struct bagel::Storage<ci::LanePos> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::LanePos>;
@@ -135,4 +138,13 @@ template <> struct bagel::Storage<ci::BreatheState> final : bagel::NoInstance {
 };
 template <> struct bagel::Storage<ci::BlinkPhase> final : bagel::NoInstance {
 	using type = bagel::PackedStorage<ci::BlinkPhase>;
+};
+template <> struct bagel::Storage<ci::CharacterID> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::CharacterID>;
+};
+template <> struct bagel::Storage<ci::WallTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::WallTag>;
+};
+template <> struct bagel::Storage<ci::TrumpBulletTag> final : bagel::NoInstance {
+	using type = bagel::PackedStorage<ci::TrumpBulletTag>;
 };
