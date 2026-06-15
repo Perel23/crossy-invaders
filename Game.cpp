@@ -58,7 +58,7 @@ namespace ci
                                                  &spec, nullptr, nullptr);
         if (audio_stream) SDL_ResumeAudioStreamDevice(audio_stream);
 
-        Entity::create().add(SelectState{0, false, 1}); // difficulty default = Normal
+        Entity::create().add(SelectState{0, false, 1, 1}); // difficulty default = Normal, start_level=1
         load_high_score();
     }
 
@@ -307,11 +307,30 @@ namespace ci
                             if (e.test(msMask)) { e.get<MapScreen>().framesLeft = 1; break; }
                     }
                     if (sc == SDL_SCANCODE_SPACE && _state == GameState::Select) {
-                        if (audio_stream) SDL_ClearAudioStream(audio_stream); // stop anthem
-                        _current_level = 1;
+                        if (audio_stream) SDL_ClearAudioStream(audio_stream);
+                        static const Mask ssMask2 = MaskBuilder().set<SelectState>().build();
+                        int startLvl = 1;
+                        for (Entity e = Entity::first(); !e.eof(); e.next())
+                            if (e.test(ssMask2)) { startLvl = e.get<SelectState>().start_level; break; }
+                        _current_level = startLvl;
                         spawn_entities();
-                        Entity::create().add(MapScreen{420, 1.f, 0, 0}); // plane already at start city
-                        _state = GameState::MapScreen;
+                        if (startLvl == 1) {
+                            Entity::create().add(MapScreen{420, 1.f, 0, 0});
+                            _state = GameState::MapScreen;
+                        } else {
+                            const int splashFrames = (startLvl == 4) ? 300 : 150;
+                            Entity::create().add(LevelSplash{splashFrames});
+                            _state = GameState::Playing;
+                        }
+                    }
+                    // Keys 1–4 on select screen: choose starting level (for testing)
+                    if (_state == GameState::Select &&
+                        (sc == SDL_SCANCODE_1 || sc == SDL_SCANCODE_2 ||
+                         sc == SDL_SCANCODE_3 || sc == SDL_SCANCODE_4)) {
+                        static const Mask ssMask3 = MaskBuilder().set<SelectState>().build();
+                        const int lvl = 1 + (sc - SDL_SCANCODE_1);
+                        for (Entity e = Entity::first(); !e.eof(); e.next())
+                            if (e.test(ssMask3)) { e.get<SelectState>().start_level = lvl; break; }
                     }
                     if (sc == SDL_SCANCODE_B && _state == GameState::Select) {
                         if (audio_stream) SDL_ClearAudioStream(audio_stream); // stop anthem

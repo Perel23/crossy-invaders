@@ -61,11 +61,12 @@ namespace ci
     void Game::select_draw() const
     {
         static const Mask ssMask = MaskBuilder().set<SelectState>().build();
-        int selected = 0, difficulty = 1;
+        int selected = 0, difficulty = 1, start_level = 1;
         for (Entity e = Entity::first(); !e.eof(); e.next())
             if (e.test(ssMask)) {
-                selected   = e.get<SelectState>().selected;
-                difficulty = e.get<SelectState>().difficulty;
+                selected    = e.get<SelectState>().selected;
+                difficulty  = e.get<SelectState>().difficulty;
+                start_level = e.get<SelectState>().start_level;
                 break;
             }
 
@@ -358,6 +359,48 @@ namespace ci
         SDL_SetRenderDrawColor(ren, 40, 50, 90, 255);
         SDL_FRect instrSep2 = {40.f, 622.f, (float)WIN_W - 80.f, 1.f};
         SDL_RenderFillRect(ren, &instrSep2);
+
+        // ── START LEVEL selector (Y: 630) — keys 1-4 ──
+        {
+            SDL_SetRenderScale(ren, 1.5f, 1.5f);
+            SDL_SetRenderDrawColor(ren, 130, 130, 180, 255);
+            SDL_RenderDebugText(ren, 16.f, 630.f / 1.5f, "START LEVEL:");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+
+            const float btnW = 46.f, btnH = 26.f, btnGap = 8.f;
+            const float btnStartX = 212.f;
+            const float btnY = 625.f;
+            for (int lvl = 1; lvl <= 4; lvl++) {
+                const bool sel = (lvl == start_level);
+                // Border
+                SDL_SetRenderDrawColor(ren, sel ? (Uint8)255 : (Uint8)60,
+                                             sel ? (Uint8)255 : (Uint8)60,
+                                             sel ? (Uint8)80  : (Uint8)90, 255);
+                SDL_FRect bord = {btnStartX + (lvl-1)*(btnW+btnGap) - 2.f, btnY - 2.f, btnW + 4.f, btnH + 4.f};
+                SDL_RenderFillRect(ren, &bord);
+                // Fill
+                SDL_SetRenderDrawColor(ren, sel ? (Uint8)40 : (Uint8)15,
+                                             sel ? (Uint8)80 : (Uint8)15,
+                                             sel ? (Uint8)140: (Uint8)30, 255);
+                SDL_FRect btn = {btnStartX + (lvl-1)*(btnW+btnGap), btnY, btnW, btnH};
+                SDL_RenderFillRect(ren, &btn);
+                // Label
+                char lbuf[4]; SDL_snprintf(lbuf, sizeof(lbuf), "%d", lvl);
+                SDL_SetRenderScale(ren, 2.f, 2.f);
+                SDL_SetRenderDrawColor(ren, sel ? (Uint8)120 : (Uint8)80,
+                                             sel ? (Uint8)200 : (Uint8)80,
+                                             sel ? (Uint8)255 : (Uint8)120, 255);
+                SDL_RenderDebugText(ren,
+                    (btnStartX + (lvl-1)*(btnW+btnGap) + btnW/2.f - 8.f) / 2.f,
+                    (btnY + (btnH - 16.f) / 2.f) / 2.f, lbuf);
+                SDL_SetRenderScale(ren, 1.f, 1.f);
+            }
+            // Hint
+            SDL_SetRenderScale(ren, 1.2f, 1.2f);
+            SDL_SetRenderDrawColor(ren, 70, 70, 100, 255);
+            SDL_RenderDebugText(ren, (btnStartX + 4*(btnW+btnGap) + 6.f) / 1.2f, 630.f / 1.2f, "keys 1-4");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
 
         // ── Blinking "PRESS SPACE TO PLAY"  (Y: 660) ──
         if ((SDL_GetTicks() / 500) % 2 == 0) {

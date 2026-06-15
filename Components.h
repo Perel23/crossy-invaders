@@ -22,7 +22,7 @@ namespace ci
 	using Invincibility = struct { int frames; };
 	using FormationState = struct { int dir; Uint64 moveTimer; Uint64 shootTimer; };
 	using GameStatus = struct { bool gameOver; bool won; bool sfxPlayed; int kills; int shots; int hits; Uint64 waveStartTime; Uint64 waveEndTime; };
-	using SelectState  = struct { int selected; bool moved; int difficulty; };  // difficulty: 0=Easy 1=Normal 2=Hard
+	using SelectState  = struct { int selected; bool moved; int difficulty; int start_level; };  // difficulty: 0=Easy 1=Normal 2=Hard
 	using LevelSplash  = struct { int framesLeft; };
 	using MapScreen    = struct { int framesLeft; float planeT; int fromIdx; int toIdx; };
 	using DamageFlash  = struct { int frames; };
