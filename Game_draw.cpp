@@ -12,6 +12,8 @@ namespace ci
 {
     void Game::draw_system() const
     {
+        const bool bench = (_state == GameState::Benchmark);
+
         // Screen shake
         {
             static const Mask shMask = MaskBuilder().set<ScreenShake>().build();
@@ -29,7 +31,13 @@ namespace ci
             }
         }
 
-        draw_background();
+        if (bench) {
+            SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+            SDL_FRect full = {0, 0, (float)WIN_W, (float)WIN_H};
+            SDL_RenderFillRect(ren, &full);
+        } else {
+            draw_background();
+        }
 
         // Compute minimum enemy lane for per-row depth tinting
         static const Mask em2 = MaskBuilder().set<EnemyTag>().set<LanePos>().build();
@@ -127,11 +135,11 @@ namespace ci
                 const float pickTiltOff = (pkScrX - WIN_W * 0.5f) * TILT;
                 const SDL_FRect pr = {pkScrX - PICK_SZ/2.f, p.y - sqPH/2.f + _camera_scroll + pickTiltOff, PICK_SZ, sqPH};
 
-                if (type == 2 && hearts_texture) {
+                if (!bench && type == 2 && hearts_texture) {
                     float tw = 0, th = 0; SDL_GetTextureSize(hearts_texture, &tw, &th);
                     SDL_FRect srcHeart = {0.f, 0.f, tw/3.f, th/3.f};
                     SDL_RenderTexture(ren, hearts_texture, &srcHeart, &pr);
-                } else if (type == 1 && iron_dome_icon_texture) {
+                } else if (!bench && type == 1 && iron_dome_icon_texture) {
                     SDL_RenderTexture(ren, iron_dome_icon_texture, nullptr, &pr);
                 } else {
                     // Colour-coded background square
@@ -185,7 +193,7 @@ namespace ci
                 constexpr float DOME_W = Game::TILE * 2.1f;
                 constexpr float DOME_H = DOME_W * (369.f / 676.f) * ISO_SCALE;
                 const SDL_FRect domeRect = {screenX - DOME_W/2.f - hopOffX, t.p.y - DOME_H/2.f + _camera_scroll + tiltOff - hopOffY, DOME_W, DOME_H};
-                if (iron_dome_texture) {
+                if (!bench && iron_dome_texture) {
                     const float phase = e.get<Shield>().timer / SHIELD_DURATION;
                     const Uint8 alpha = (Uint8)(180 + 60 * std::abs(std::sin(phase * 12.f)));
                     SDL_SetTextureAlphaMod(iron_dome_texture, alpha);
@@ -200,10 +208,9 @@ namespace ci
             if (e.test(playerMask)) {
                 const int hp       = e.has<Health>()      ? e.get<Health>().hp      : 3;
                 const int dfFrames = e.has<DamageFlash>() ? e.get<DamageFlash>().frames : 0;
-                // Sprite blinks every 3 frames while DamageFlash is active
                 const bool spriteOn = !(dfFrames > 0 && (dfFrames / 3) % 2 == 1);
                 if (spriteOn) {
-                    if (player_texture) {
+                    if (!bench && player_texture) {
                         if (hp == 1) SDL_SetTextureColorMod(player_texture, 255, 80, 80);
                         SDL_RenderTexture(ren, player_texture, nullptr, &dest);
                         if (hp == 1) SDL_SetTextureColorMod(player_texture, 255, 255, 255);
@@ -214,142 +221,127 @@ namespace ci
                 }
             } else if (e.test(bulletMask)) {
                 const bool fp = e.get<BulletTag>().fromPlayer;
-                if (fp && e.test(trumpBulletMsk)) {
+                if (!bench && fp && e.test(trumpBulletMsk)) {
                     // B2 Spirit bomber: wide stealth-grey chevron pointing in direction of travel
                     const float cx  = dest.x + dest.w * 0.5f;
-                    const float tip = dest.y;               // leading edge (nose)
-                    const float bas = dest.y + dest.h;      // trailing edge
+                    const float tip = dest.y;
+                    const float bas = dest.y + dest.h;
                     const float hw  = dest.w * 0.5f;
                     SDL_Vertex verts[3] = {
-                        {{cx,        tip}, {55, 60, 70, 255}, {0,0}},   // nose
-                        {{cx - hw,   bas}, {35, 40, 50, 255}, {0,0}},   // left wing
-                        {{cx + hw,   bas}, {35, 40, 50, 255}, {0,0}},   // right wing
+                        {{cx,        tip}, {55, 60, 70, 255}, {0,0}},
+                        {{cx - hw,   bas}, {35, 40, 50, 255}, {0,0}},
+                        {{cx + hw,   bas}, {35, 40, 50, 255}, {0,0}},
                     };
                     SDL_RenderGeometry(ren, nullptr, verts, 3, nullptr, 0);
-                    // engine glow
                     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
                     SDL_SetRenderDrawColor(ren, 120, 200, 255, 160);
                     SDL_FRect glow = {cx - 3.f, bas - 3.f, 6.f, 4.f};
                     SDL_RenderFillRect(ren, &glow);
                     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
-                } else if (fp && e.test(putinBulletMsk)) {
+                } else if (!bench && fp && e.test(putinBulletMsk)) {
                     // Putin's nuclear missile: red warhead + olive body + fins + exhaust
                     const float cx  = dest.x + dest.w * 0.5f;
                     const float top = dest.y;
                     const float bot = dest.y + dest.h;
                     const float hw  = dest.w * 0.5f;
-
-                    // Warhead — red triangle
                     SDL_Vertex nose[3] = {
                         {{cx,        top},        {220, 30,  30, 255}, {0,0}},
                         {{cx - hw,   top + 5.f},  {180, 30,  30, 255}, {0,0}},
                         {{cx + hw,   top + 5.f},  {180, 30,  30, 255}, {0,0}},
                     };
                     SDL_RenderGeometry(ren, nullptr, nose, 3, nullptr, 0);
-
-                    // Body — olive green
                     SDL_SetRenderDrawColor(ren, 80, 100, 50, 255);
                     SDL_FRect body = {cx - hw, top + 5.f, dest.w, bot - top - 9.f};
                     SDL_RenderFillRect(ren, &body);
-
-                    // Left fin
                     SDL_Vertex lf[3] = {
                         {{cx - hw,        bot - 5.f}, {60, 80, 35, 255}, {0,0}},
                         {{cx - hw * 2.5f, bot},       {50, 70, 30, 255}, {0,0}},
                         {{cx - hw,        bot},        {60, 80, 35, 255}, {0,0}},
                     };
                     SDL_RenderGeometry(ren, nullptr, lf, 3, nullptr, 0);
-
-                    // Right fin
                     SDL_Vertex rf[3] = {
                         {{cx + hw,        bot - 5.f}, {60, 80, 35, 255}, {0,0}},
                         {{cx + hw,        bot},        {60, 80, 35, 255}, {0,0}},
                         {{cx + hw * 2.5f, bot},        {50, 70, 30, 255}, {0,0}},
                     };
                     SDL_RenderGeometry(ren, nullptr, rf, 3, nullptr, 0);
-
-                    // Exhaust glow
                     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
                     SDL_SetRenderDrawColor(ren, 255, 130, 30, 180);
                     SDL_FRect exh = {cx - 3.f, bot - 2.f, 6.f, 5.f};
                     SDL_RenderFillRect(ren, &exh);
                     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
-                } else if (fp && e.test(bibiBulletMsk)) {
-                    // Bibi — mahal.jpg image bullet
+                } else if (!bench && fp && e.test(bibiBulletMsk)) {
                     if (bibi_bullet_tex)
                         SDL_RenderTexture(ren, bibi_bullet_tex, nullptr, &dest);
                     else {
                         SDL_SetRenderDrawColor(ren, 0, 100, 200, 255);
                         SDL_RenderFillRect(ren, &dest);
                     }
-                } else if (fp && e.test(saraBulletMsk)) {
-                    // Sara — snowspray.png image bullet
+                } else if (!bench && fp && e.test(saraBulletMsk)) {
                     if (sara_bullet_tex)
                         SDL_RenderTexture(ren, sara_bullet_tex, nullptr, &dest);
                     else {
                         SDL_SetRenderDrawColor(ren, 180, 220, 255, 255);
                         SDL_RenderFillRect(ren, &dest);
                     }
-                } else if (fp && e.test(benGvirBulletMsk)) {
-                    // Ben Gvir's Torah scroll — etz chaim handles + parchment body + text lines
+                } else if (!bench && fp && e.test(benGvirBulletMsk)) {
                     const float cx  = dest.x + dest.w * 0.5f;
                     const float top = dest.y;
                     const float bot = dest.y + dest.h;
                     const float hw  = dest.w * 0.5f;
-
-                    // Top & bottom etz chaim handles (dark wood)
                     SDL_SetRenderDrawColor(ren, 101, 67, 33, 255);
                     SDL_FRect topHandle = {cx - hw * 1.8f, top,        hw * 3.6f, 3.f};
                     SDL_FRect botHandle = {cx - hw * 1.8f, bot - 3.f,  hw * 3.6f, 3.f};
                     SDL_RenderFillRect(ren, &topHandle);
                     SDL_RenderFillRect(ren, &botHandle);
-
-                    // Parchment scroll body
                     SDL_SetRenderDrawColor(ren, 240, 210, 150, 255);
                     SDL_FRect scroll = {cx - hw, top + 3.f, dest.w, dest.h - 6.f};
                     SDL_RenderFillRect(ren, &scroll);
-
-                    // Hebrew text lines
                     SDL_SetRenderDrawColor(ren, 70, 40, 10, 255);
                     for (int line = 0; line < 3; line++) {
                         SDL_FRect ln = {cx - hw + 1.f, top + 5.f + line * 3.5f, dest.w - 2.f, 1.f};
                         SDL_RenderFillRect(ren, &ln);
                     }
                 } else {
+                    // Benchmark plain bullet, or any unhandled bullet type
                     SDL_SetRenderDrawColor(ren, 255, fp ? 255 : 140, 0, 255);
                     SDL_RenderFillRect(ren, &dest);
                 }
             } else if (e.test(wallDrwMask)) {
-                // Trump's "Build the Wall" — animated brick pattern with fade-out
-                const int wFrames = e.get<WallTag>().frames;
-                const Uint8 a = (Uint8)(std::min(1.f, wFrames / 30.f) * 220.f);
-                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-                const float wx = dest.x, wy = dest.y, ww = dest.w, wh = dest.h;
-                const float brickH = 18.f;
-                const int numRows = (int)(wh / brickH) + 1;
-                for (int row = 0; row < numRows; row++) {
-                    const float rowY = wy + row * brickH;
-                    const float rowH = std::min(brickH - 2.f, wy + wh - rowY - 2.f);
-                    if (rowH <= 0.f) break;
-                    const float halfBrick = ww * 0.5f;
-                    const float startX = (row % 2 == 0) ? wx : wx - halfBrick * 0.5f;
-                    for (float bx = startX; bx < wx + ww; bx += halfBrick) {
-                        const float bLeft  = std::max(bx,              wx);
-                        const float bRight = std::min(bx + halfBrick - 2.f, wx + ww);
-                        if (bRight <= bLeft) continue;
-                        SDL_SetRenderDrawColor(ren, 190, 75, 25, a);
-                        SDL_FRect brick = {bLeft, rowY, bRight - bLeft, rowH};
-                        SDL_RenderFillRect(ren, &brick);
+                if (bench) {
+                    SDL_SetRenderDrawColor(ren, 140, 140, 140, 255);
+                    SDL_RenderFillRect(ren, &dest);
+                } else {
+                    // Trump's "Build the Wall" — animated brick pattern with fade-out
+                    const int wFrames = e.get<WallTag>().frames;
+                    const Uint8 a = (Uint8)(std::min(1.f, wFrames / 30.f) * 220.f);
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+                    const float wx = dest.x, wy = dest.y, ww = dest.w, wh = dest.h;
+                    const float brickH = 18.f;
+                    const int numRows = (int)(wh / brickH) + 1;
+                    for (int row = 0; row < numRows; row++) {
+                        const float rowY = wy + row * brickH;
+                        const float rowH = std::min(brickH - 2.f, wy + wh - rowY - 2.f);
+                        if (rowH <= 0.f) break;
+                        const float halfBrick = ww * 0.5f;
+                        const float startX = (row % 2 == 0) ? wx : wx - halfBrick * 0.5f;
+                        for (float bx = startX; bx < wx + ww; bx += halfBrick) {
+                            const float bLeft  = std::max(bx,              wx);
+                            const float bRight = std::min(bx + halfBrick - 2.f, wx + ww);
+                            if (bRight <= bLeft) continue;
+                            SDL_SetRenderDrawColor(ren, 190, 75, 25, a);
+                            SDL_FRect brick = {bLeft, rowY, bRight - bLeft, rowH};
+                            SDL_RenderFillRect(ren, &brick);
+                        }
                     }
+                    SDL_SetRenderDrawColor(ren, 230, 120, 60, a);
+                    SDL_FRect hi = {wx, wy, 2.f, wh};
+                    SDL_RenderFillRect(ren, &hi);
+                    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
                 }
-                // left-edge highlight
-                SDL_SetRenderDrawColor(ren, 230, 120, 60, a);
-                SDL_FRect hi = {wx, wy, 2.f, wh};
-                SDL_RenderFillRect(ren, &hi);
-                SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
             } else if (e.test(shelterDMsk)) {
                 const Uint8 v = (Uint8)(80 + e.get<Health>().hp * 35);
-                if (shelter_texture) {
+                if (!bench && shelter_texture) {
                     SDL_SetTextureColorMod(shelter_texture, v, v, v);
                     SDL_RenderTexture(ren, shelter_texture, nullptr, &dest);
                     SDL_SetTextureColorMod(shelter_texture, 255, 255, 255);
@@ -358,23 +350,22 @@ namespace ci
                 }
             } else if (e.test(hazardVisMsk)) {
                 const int idx = e.get<HazardVisual>().tex_index;
-                const float cx = screenX;
-                // Driving-over-bumps wobble: read from BreatheState, updated by animate_system
+                const float hcx = screenX;
                 const float wobble = e.has<BreatheState>()
                     ? std::sin(e.get<BreatheState>().phase) * e.get<BreatheState>().amplitude
                     : 0.f;
-                const float cy = t.p.y + _camera_scroll + tiltOff - wobble;
+                const float hcy = t.p.y + _camera_scroll + tiltOff - wobble;
                 const float hw = d.size.x * 0.5f;
                 const float hh = sqH * 0.5f;
                 const float sh = hw * TILT;
-                if (haz_textures[idx]) {
+                if (!bench && haz_textures[idx]) {
                     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
                     const SDL_FColor wh = {1.f, 1.f, 1.f, 1.f};
                     SDL_Vertex v[4] = {
-                        {{cx - hw, cy - hh - sh}, wh, {0.f, 0.f}},
-                        {{cx + hw, cy - hh + sh}, wh, {1.f, 0.f}},
-                        {{cx + hw, cy + hh + sh}, wh, {1.f, 1.f}},
-                        {{cx - hw, cy + hh - sh}, wh, {0.f, 1.f}},
+                        {{hcx - hw, hcy - hh - sh}, wh, {0.f, 0.f}},
+                        {{hcx + hw, hcy - hh + sh}, wh, {1.f, 0.f}},
+                        {{hcx + hw, hcy + hh + sh}, wh, {1.f, 1.f}},
+                        {{hcx - hw, hcy + hh - sh}, wh, {0.f, 1.f}},
                     };
                     const int hidx[6] = {0,1,2, 0,2,3};
                     SDL_RenderGeometry(ren, haz_textures[idx], v, 4, hidx, 6);
@@ -383,7 +374,7 @@ namespace ci
             } else if (e.test(bossMask)) {
                 const int hp = e.get<Health>().hp;
                 const Uint8 g = (Uint8)(255 * hp / BOSS_HP);
-                if (boss_texture) {
+                if (!bench && boss_texture) {
                     SDL_SetTextureColorMod(boss_texture, 255, g, g);
                     SDL_RenderTexture(ren, boss_texture, nullptr, &dest);
                     SDL_SetTextureColorMod(boss_texture, 255, 255, 255);
@@ -400,18 +391,18 @@ namespace ci
                 Uint8 r = (Uint8)std::max(120, 255 - depth * 55);
                 Uint8 g = (Uint8)std::max(100, 255 - depth * 45);
                 Uint8 b = 255;
-                if (hp < maxHp) { r = 255; g = 80; b = 80; } // HP-damage tint overrides
-                if (enemy_texture) {
+                if (hp < maxHp) { r = 255; g = 80; b = 80; }
+                if (!bench && enemy_texture) {
                     SDL_SetTextureColorMod(enemy_texture, r, g, b);
                     SDL_RenderTexture(ren, enemy_texture, nullptr, &dest);
                     SDL_SetTextureColorMod(enemy_texture, 255, 255, 255);
                 } else {
-                    SDL_SetRenderDrawColor(ren, r, 50, b, 255); SDL_RenderFillRect(ren, &dest);
+                    SDL_SetRenderDrawColor(ren, bench ? 200 : r, bench ? 200 : 50, bench ? 200 : b, 255);
+                    SDL_RenderFillRect(ren, &dest);
                 }
             } else if (e.test(enemyMask)) {
-                // Fallback for any enemy without LanePos (shouldn't happen)
-                if (enemy_texture) SDL_RenderTexture(ren, enemy_texture, nullptr, &dest);
-                else { SDL_SetRenderDrawColor(ren, 220, 50, 50, 255); SDL_RenderFillRect(ren, &dest); }
+                if (!bench && enemy_texture) SDL_RenderTexture(ren, enemy_texture, nullptr, &dest);
+                else { SDL_SetRenderDrawColor(ren, bench ? 200 : 220, bench ? 200 : 50, bench ? 200 : 50, 255); SDL_RenderFillRect(ren, &dest); }
             }
         }
 
@@ -479,7 +470,7 @@ namespace ci
             const int hp   = e.get<Health>().hp;
             const auto& sh = e.get<Shield>();
 
-            if (hearts_texture) {
+            if (!bench && hearts_texture) {
                 float tw = 0, th = 0; SDL_GetTextureSize(hearts_texture, &tw, &th);
                 const float cw = tw/3.f, ch = th/3.f;
                 const SDL_FRect srcFull  = {0.f, 0.f, cw, ch};
@@ -487,7 +478,6 @@ namespace ci
                 const int dfFrames = e.has<DamageFlash>() ? e.get<DamageFlash>().frames : 0;
                 for (int i = 0; i < 3; i++) {
                     const SDL_FRect dst = {8.f + i*30.f, 6.f, 26.f, 26.f};
-                    // Flash the just-lost slot: blink it on/off while DamageFlash is active
                     if (i == hp && dfFrames > 0) {
                         if ((dfFrames / 4) % 2 == 0) {
                             SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
@@ -515,7 +505,7 @@ namespace ci
                 const SDL_FRect icon = {150.f + i*32.f, 4.f, 28.f, 25.f};
                 // Flash the just-used slot before it goes dark
                 const bool flashing = (sfFrames > 0 && i == sh.charges && !avail);
-                if (iron_dome_icon_texture) {
+                if (!bench && iron_dome_icon_texture) {
                     Uint8 alpha = avail ? (active && !blinkOn ? 120 : 255)
                                        : (flashing && (sfFrames / 4) % 2 == 0 ? 220 : 60);
                     SDL_SetTextureAlphaMod(iron_dome_icon_texture, alpha);
