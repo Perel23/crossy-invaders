@@ -67,6 +67,7 @@ namespace ci
 		void play_sfx(int type) const;
 		void load_high_score();
 		void save_high_score() const;
+		void switch_character() const;
 		void draw_background() const;
 		void draw_system() const;
 		void draw_level_splash() const;

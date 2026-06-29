@@ -363,6 +363,8 @@ namespace ci
                     }
                     if (sc == SDL_SCANCODE_H)
                         _show_perf_hud = !_show_perf_hud;
+                    if (sc == SDL_SCANCODE_C && _state == GameState::Playing)
+                        switch_character();
                     if (sc == SDL_SCANCODE_R && (gameOver || won)) {
                         _current_level = 1;
                         reset();

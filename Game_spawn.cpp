@@ -324,4 +324,46 @@ namespace ci
         }
     }
 
+    void Game::switch_character() const
+    {
+        static const char* char_files[NUM_CHARS] = {
+            "res/trump_pixel.png", "res/bibi_pixel.png", "res/bengvir_pixel.png",
+            "res/zelensky_pixel.png", "res/putin_pixel.png", "res/obama_pixel.png",
+            "res/eminem_pixel.png", "res/madonna_pixel.png", "res/michaeljackson_pixel.png",
+            "res/yoamashit_pixel.png", "res/stalin_pixel.png", "res/sara_pixel.png"
+        };
+        static const int char_sfx[NUM_CHARS] = {
+            8, 7, 9, 10, 11, 18, 12, 13, 14, 17, 16, 15
+        };
+
+        // Advance character on player entity
+        static const Mask playerMask = MaskBuilder().set<PlayerTag>().set<CharacterID>().build();
+        int newId = 0;
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(playerMask)) continue;
+            newId = (e.get<CharacterID>().id + 1) % NUM_CHARS;
+            e.get<CharacterID>().id = newId;
+            break;
+        }
+
+        // Sync SelectState so anthem / select screen stay consistent
+        static const Mask ssMask = MaskBuilder().set<SelectState>().build();
+        for (Entity e = Entity::first(); !e.eof(); e.next()) {
+            if (!e.test(ssMask)) continue;
+            e.get<SelectState>().selected = newId;
+            break;
+        }
+
+        // Reload player sprite
+        if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
+        SDL_Surface* ps = IMG_Load(char_files[newId]);
+        if (ps) { player_texture = SDL_CreateTextureFromSurface(ren, ps); SDL_DestroySurface(ps); }
+
+        // Play new character's anthem
+        if (audio_stream) SDL_ClearAudioStream(audio_stream);
+        _select_last_char = newId;
+        const int sfx = char_sfx[newId];
+        if (sfx != 0) play_sfx(sfx);
+    }
+
 } // namespace ci
