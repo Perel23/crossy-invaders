@@ -59,19 +59,84 @@ namespace ci
             }
 
         struct WayPoint { float x, y; const char* name; };
-        const WayPoint trump_route[] = {
+        const WayPoint trump_route[] = {       // 0
             {120.f, 390.f, "WASHINGTON"},
             {350.f, 270.f, "LONDON"},
             {640.f, 340.f, "DUBAI"},
             {890.f, 360.f, "TEHRAN"},
         };
-        const WayPoint bibi_route[] = {
+        const WayPoint bibi_route[] = {        // 1
             {130.f, 410.f, "JERUSALEM"},
             {380.f, 385.f, "AMMAN"},
             {630.f, 360.f, "BAGHDAD"},
             {880.f, 345.f, "TEHRAN"},
         };
-        const WayPoint* route    = (selected == 0) ? trump_route : bibi_route;
+        const WayPoint bengvir_route[] = {     // 2
+            {130.f, 410.f, "JERUSALEM"},
+            {380.f, 385.f, "AMMAN"},
+            {630.f, 360.f, "BAGHDAD"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint zelensky_route[] = {    // 3
+            {290.f, 285.f, "KYIV"},
+            {440.f, 315.f, "ISTANBUL"},
+            {650.f, 345.f, "BAGHDAD"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint putin_route[] = {       // 4
+            {185.f, 250.f, "MOSCOW"},
+            {470.f, 290.f, "BAKU"},
+            {650.f, 345.f, "BAGHDAD"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint obama_route[] = {       // 5
+            { 55.f, 435.f, "HAWAII"},
+            {150.f, 375.f, "NEW YORK"},
+            {350.f, 270.f, "LONDON"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint eminem_route[] = {      // 6
+            {115.f, 365.f, "DETROIT"},
+            {350.f, 270.f, "LONDON"},
+            {530.f, 320.f, "ISTANBUL"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint madonna_route[] = {     // 7
+            {150.f, 375.f, "NEW YORK"},
+            {350.f, 270.f, "LONDON"},
+            {640.f, 335.f, "DUBAI"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint jackson_route[] = {     // 8
+            { 70.f, 405.f, "NEVERLAND"},
+            {150.f, 375.f, "NEW YORK"},
+            {350.f, 270.f, "LONDON"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint yoamashit_route[] = {   // 9
+            {130.f, 410.f, "JERUSALEM"},
+            {380.f, 385.f, "AMMAN"},
+            {630.f, 360.f, "BAGHDAD"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint stalin_route[] = {      // 10
+            {185.f, 250.f, "MOSCOW"},
+            {470.f, 290.f, "BAKU"},
+            {650.f, 345.f, "BAGHDAD"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint sara_route[] = {        // 11
+            {130.f, 410.f, "JERUSALEM"},
+            {380.f, 385.f, "AMMAN"},
+            {630.f, 360.f, "BAGHDAD"},
+            {880.f, 345.f, "TEHRAN"},
+        };
+        const WayPoint* const all_routes[Game::NUM_CHARS] = {
+            trump_route, bibi_route, bengvir_route, zelensky_route,
+            putin_route, obama_route, eminem_route, madonna_route,
+            jackson_route, yoamashit_route, stalin_route, sara_route,
+        };
+        const WayPoint* route = all_routes[selected < Game::NUM_CHARS ? selected : 0];
         static const char* const char_names[Game::NUM_CHARS] = {
             "TRUMP", "BIBI", "BEN-GVIR", "ZELENSKY",
             "PUTIN", "OBAMA", "EMINEM", "MADONNA",
