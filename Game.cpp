@@ -285,6 +285,30 @@ namespace ci
             SDL_Event ev;
             while (SDL_PollEvent(&ev)) {
                 if (ev.type == SDL_EVENT_QUIT) quit = true;
+                if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && _state == GameState::Paused) {
+                    const float cx = (WIN_W - 480.f) / 2.f;
+                    const float cy = (WIN_H - 300.f) / 2.f;
+                    const float mx = ev.button.x;
+                    const float my = ev.button.y;
+                    // Mute checkbox
+                    {
+                        const float bx = cx + 30.f, by = cy + 232.f, bs = 14.f;
+                        if (mx >= bx && mx <= bx + bs && my >= by && my <= by + bs) {
+                            _muted = !_muted;
+                            if (_muted && audio_stream) SDL_ClearAudioStream(audio_stream);
+                        }
+                    }
+                    // Exit Game button
+                    {
+                        const float ebx = cx + 290.f, eby = cy + 228.f, ebw = 150.f, ebh = 22.f;
+                        if (mx >= ebx && mx <= ebx + ebw && my >= eby && my <= eby + ebh) {
+                            if (audio_stream) SDL_ClearAudioStream(audio_stream);
+                            clear_game_entities();
+                            _select_last_char = -1;
+                            _state = GameState::Select;
+                        }
+                    }
+                }
                 if (ev.type == SDL_EVENT_KEY_DOWN) {
                     const SDL_Scancode sc = ev.key.scancode;
                     if (sc == SDL_SCANCODE_ESCAPE) {

@@ -12,7 +12,7 @@ namespace ci
 {
     void Game::play_sfx(int type) const
     {
-        if (!audio_stream) return;
+        if (!audio_stream || _muted) return;
         // Anthems (types 7-18) bypass queue throttle and clear the stream first.
         // Type 19 (WRONG!) is a priority in-game SFX: skip throttle, but don't clear stream.
         if (type >= 7 && type <= 18) {

@@ -272,16 +272,16 @@ namespace ci
             SDL_FRect star = {sx, sy, 2.f, 2.f}; SDL_RenderFillRect(ren, &star);
         }
 
-        // Central card — 480 × 280, centred
+        // Central card — 480 × 300, centred
         const float cx = (WIN_W - 480.f) / 2.f;   // 272
-        const float cy = (WIN_H - 280.f) / 2.f;   // 244
+        const float cy = (WIN_H - 300.f) / 2.f;   // 234
         // Border
         SDL_SetRenderDrawColor(ren, 100, 130, 255, 255);
-        SDL_FRect border = {cx - 3.f, cy - 3.f, 486.f, 286.f};
+        SDL_FRect border = {cx - 3.f, cy - 3.f, 486.f, 306.f};
         SDL_RenderFillRect(ren, &border);
         // Card body
         SDL_SetRenderDrawColor(ren, 10, 14, 40, 255);
-        SDL_FRect card = {cx, cy, 480.f, 280.f};
+        SDL_FRect card = {cx, cy, 480.f, 300.f};
         SDL_RenderFillRect(ren, &card);
         // Header strip
         SDL_SetRenderDrawColor(ren, 25, 35, 90, 255);
@@ -333,11 +333,56 @@ namespace ci
         }
         SDL_SetRenderScale(ren, 1.f, 1.f);
 
+        // Mute checkbox
+        {
+            const float bx = cx + 30.f;
+            const float by = cy + 232.f;
+            const float bs = 14.f;
+            // Box outline
+            SDL_SetRenderDrawColor(ren, 100, 160, 255, 255);
+            SDL_FRect boxOut = {bx - 1.f, by - 1.f, bs + 2.f, bs + 2.f};
+            SDL_RenderFillRect(ren, &boxOut);
+            SDL_SetRenderDrawColor(ren, 10, 14, 40, 255);
+            SDL_FRect boxIn = {bx, by, bs, bs};
+            SDL_RenderFillRect(ren, &boxIn);
+            // Checkmark fill when muted
+            if (_muted) {
+                SDL_SetRenderDrawColor(ren, 80, 200, 255, 255);
+                SDL_FRect check = {bx + 2.f, by + 2.f, bs - 4.f, bs - 4.f};
+                SDL_RenderFillRect(ren, &check);
+            }
+            // Label
+            SDL_SetRenderScale(ren, 1.5f, 1.5f);
+            SDL_SetRenderDrawColor(ren, 200, 200, 200, 255);
+            SDL_RenderDebugText(ren, (bx + bs + 8.f)/1.5f, (by + 1.f)/1.5f, "Mute Sound");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
+
+        // Exit Game button
+        {
+            const float ebx = cx + 290.f;
+            const float eby = cy + 228.f;
+            const float ebw = 150.f;
+            const float ebh = 22.f;
+            // Button background
+            SDL_SetRenderDrawColor(ren, 160, 40, 40, 255);
+            SDL_FRect ebBorder = {ebx - 1.f, eby - 1.f, ebw + 2.f, ebh + 2.f};
+            SDL_RenderFillRect(ren, &ebBorder);
+            SDL_SetRenderDrawColor(ren, 90, 15, 15, 255);
+            SDL_FRect ebBody = {ebx, eby, ebw, ebh};
+            SDL_RenderFillRect(ren, &ebBody);
+            // Label centred in button
+            SDL_SetRenderScale(ren, 1.5f, 1.5f);
+            SDL_SetRenderDrawColor(ren, 255, 160, 160, 255);
+            SDL_RenderDebugText(ren, (ebx + 18.f)/1.5f, (eby + 4.f)/1.5f, "Exit Game");
+            SDL_SetRenderScale(ren, 1.f, 1.f);
+        }
+
         // Resume hint (blinking)
         if ((SDL_GetTicks() / 550) % 2 == 0) {
             SDL_SetRenderScale(ren, 2.f, 2.f);
             SDL_SetRenderDrawColor(ren, 80, 200, 255, 255);
-            SDL_RenderDebugText(ren, (cx + 100.f)/2.f, (cy + 248.f)/2.f, "P / ESC  to resume");
+            SDL_RenderDebugText(ren, (cx + 100.f)/2.f, (cy + 272.f)/2.f, "P / ESC  to resume");
             SDL_SetRenderScale(ren, 1.f, 1.f);
         }
     }

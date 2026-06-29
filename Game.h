@@ -101,6 +101,7 @@ namespace ci
 		mutable float        _select_scroll       = 0.f;  // animated select-screen background offset
 		mutable int          _select_last_char   = -1;   // last character whose anthem played (-1=none)
 		mutable bool         _show_perf_hud      = true; // toggle with H key
+		mutable bool         _muted              = false;
 		mutable Uint64       _bench_timer        = 0;   // benchmark: last enemy-respawn check time
 		mutable int          _bench_frame        = 0;   // benchmark: frame counter for auto-shoot
 		mutable int          _bench_max_speedup  = 0;   // benchmark: peak speedup ratio ever recorded
