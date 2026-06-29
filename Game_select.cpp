@@ -48,9 +48,9 @@ namespace ci
                 12,  // 6  Eminem      — Slim Shady
                 13,  // 7  Madonna     — Like a Virgin
                 14,  // 8  M.Jackson   — Thriller
-                15,  // 9  Sara        — Ba Ma
+                17,  // 9  Yoamashit   — Ma Sheat Ohevet
                 16,  // 10 Stalin      — Moscow
-                17,  // 11 Yoamashit   — Ma Sheat Ohevet
+                15,  // 11 Sara        — Ba Ma
             };
             const int sfx = char_sfx[ss.selected];
             if (sfx != 0) play_sfx(sfx);
@@ -129,18 +129,18 @@ namespace ci
         // Card geometry
         static const char* char_names[NUM_CHARS] = {
             "TRUMP", "BIBI", "BEN GVIR", "ZELENSKY", "PUTIN", "OBAMA",
-            "EMINEM", "MADONNA", "M.JACKSON", "SARA", "STALIN", "YOAMASHIT"
+            "EMINEM", "MADONNA", "M.JACKSON", "YOAMASHIT", "STALIN", "SARA"
         };
         // Per-character accent colours (bg, header)
         static const SDL_Color char_bg[NUM_CHARS] = {
             {150,75,15,255}, {20,60,150,255}, {80,20,20,255}, {20,100,60,255},
             {80,10,10,255},  {10,40,100,255}, {60,20,80,255}, {100,20,60,255},
-            {20,20,20,255},  {80,40,80,255},  {30,10,10,255}, {10,60,40,255}
+            {20,20,20,255},  {10,60,40,255},  {30,10,10,255}, {80,40,80,255}
         };
         static const SDL_Color char_hdr[NUM_CHARS] = {
             {210,110,30,255}, {50,110,220,255}, {160,40,40,255}, {40,180,100,255},
             {160,20,20,255},  {20,80,200,255},  {130,50,180,255},{200,50,120,255},
-            {60,60,60,255},   {160,80,160,255}, {80,20,20,255},  {20,140,80,255}
+            {60,60,60,255},   {20,140,80,255},  {80,20,20,255},  {160,80,160,255}
         };
 
         // Slot offsets: -2, -1, 0(selected), +1, +2

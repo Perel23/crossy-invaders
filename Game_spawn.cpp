@@ -41,7 +41,7 @@ namespace ci
             "res/trump_pixel.png", "res/bibi_pixel.png", "res/bengvir_pixel.png",
             "res/zelensky_pixel.png", "res/putin_pixel.png", "res/obama_pixel.png",
             "res/eminem_pixel.png", "res/madonna_pixel.png", "res/michaeljackson_pixel.png",
-            "res/sara_pixel.png", "res/stalin_pixel.png", "res/yoamashit_pixel.png"
+            "res/yoamashit_pixel.png", "res/stalin_pixel.png", "res/sara_pixel.png"
         };
         if (player_texture) { SDL_DestroyTexture(player_texture); player_texture = nullptr; }
         SDL_Surface* ps = IMG_Load(char_files[selected < NUM_CHARS ? selected : 0]);

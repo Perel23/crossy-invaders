@@ -350,7 +350,7 @@ namespace ci
                                  BulletTag{true}, Velocity{0.f, playerBulletDY});
                         b.add(PutinBulletTag{});
                     }
-                } else if (charId == 9) {
+                } else if (charId == 11) {
                     // Sara — snowspray.png image; respects SpreadShot and RapidFire
                     if (spread) {
                         for (float dx : {-2.5f, 0.f, 2.5f}) {
