@@ -200,8 +200,8 @@ namespace ci
             const float nt = std::min(planeT + 0.02f, 1.f);
             const float nx = fx + (tx - fx) * nt;
             const float ny = fy + (ty - fy) * nt + arcY(nt);
-            const float angle = std::atan2f(ny - py, nx - px);
-            const float ca = std::cosf(angle), sa = std::sinf(angle);
+            const float angle = std::atan2(ny - py, nx - px);
+            const float ca = std::cos(angle), sa = std::sin(angle);
             // Draw body as a small rotated rect (4 vertices via SDL_RenderGeometry)
             constexpr float BW = 18.f, BH = 7.f;
             SDL_Vertex verts[4];
