@@ -7,3 +7,10 @@ cmake-build-*/
 *.dylib
 .DS_Store
 .claude
+
+# Local docs / notes (not part of the deliverable)
+QUERIES*
+PROJECT_STRUCTURE.md
+
+# Runtime save data
+highscore.dat
