@@ -14,8 +14,10 @@ namespace ci
     {
         static const Mask ssMask = MaskBuilder().set<SelectState>().build();
         Entity ssEnt = Entity::first();
+        bool ssFound = false;
         for (Entity e = Entity::first(); !e.eof(); e.next())
-            if (e.test(ssMask)) { ssEnt = e; break; }
+            if (e.test(ssMask)) { ssEnt = e; ssFound = true; break; }
+        if (!ssFound) return;
         auto& ss = ssEnt.get<SelectState>();
 
         const bool* keys = SDL_GetKeyboardState(nullptr);

@@ -208,8 +208,14 @@ namespace bagel
 	template <class>
 	struct Component final : NoInstance
 	{
-		static inline const int				Index = ++compCounter;
-		static inline const Mask::bit_type	Bit = Mask::bit(Index);
+		// Function-local statics: index is assigned on first use, so Bit can never
+		// observe a not-yet-initialized Index (TU dynamic-init order is unordered
+		// for template static data members — real crashes on MinGW).
+		static int Index() {
+			static const int idx = ++compCounter;
+			return idx;
+		}
+		static Mask::bit_type Bit() { return Mask::bit(Index()); }
 	};
 
 	// ─── EntityQuery ─────────────────────────────────────────────────────────────
@@ -327,22 +333,22 @@ namespace bagel
 		template <class T>
 		static void addComponent(ent_type ent, const T& comp) {
 			const Mask oldMask = _masks[ent.id];
-			_masks[ent.id].set(Component<T>::Bit);
+			_masks[ent.id].set(Component<T>::Bit());
 			Storage<T>::type::add(ent, comp);
 			_onAdd(ent, oldMask);              // update queries
 		}
 		template <class T>
 		static void delComponent(ent_type ent) {
 			const Mask oldMask = _masks[ent.id];
-			_masks[ent.id].clear(Component<T>::Bit);
+			_masks[ent.id].clear(Component<T>::Bit());
 			Storage<T>::type::del(ent);
 			_onDel(ent, oldMask);              // update queries
 		}
 		template <class T>
 		static void registerDeleter(DeleteFunc func) {
-			while (_deleters().size() < Component<T>::Index+1)
+			while (_deleters().size() < Component<T>::Index()+1)
 				_deleters().push(nullptr);
-			_deleters()[Component<T>::Index] = func;
+			_deleters()[Component<T>::Index()] = func;
 		}
 
 		static id_type maxId() { return _maxId; }
@@ -386,7 +392,7 @@ namespace bagel
 	public:
 		template <class T>
 		MaskBuilder& set() {
-			m.set(Component<T>::Bit);
+			m.set(Component<T>::Bit());
 			return *this;
 		}
 		Mask build() const { return m; }
@@ -426,7 +432,7 @@ namespace bagel
 				del<Ts...>();
 		}
 
-		template <class T> bool has() const { return mask().test(Component<T>::Bit); }
+		template <class T> bool has() const { return mask().test(Component<T>::Bit()); }
 		bool test(const Mask& m) const { return mask().test(m); }
 
 		static Entity first() { return Entity{{0}}; }
