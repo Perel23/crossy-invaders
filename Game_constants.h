@@ -14,5 +14,5 @@ namespace ci
 
     // Unified world-speed multiplier: Easy = 0.82×, Normal = 1.0×, Hard = 1.18×
     // Applied to enemy movement, shooting, hazard movement, and bullet speed.
-    static float diff_base_scale(int d) { return d == 0 ? 0.82f : d == 2 ? 1.18f : 1.0f; }
+    inline float diff_base_scale(int d) { return d == 0 ? 0.82f : d == 2 ? 1.18f : 1.0f; }
 }
