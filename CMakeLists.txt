@@ -23,10 +23,13 @@ add_executable(crossy_invaders
     bagel.h)
 
 if (MINGW)
-    # Statically link the MinGW runtime (libgcc/libstdc++/libwinpthread) so the
-    # .exe runs standalone on any Windows machine, even one without MinGW
-    # installed or with a mismatched runtime DLL on PATH.
-    target_link_options(crossy_invaders PRIVATE -static -static-libgcc -static-libstdc++)
+    # Statically link libgcc/libstdc++ only (not a blanket -static — that also
+    # forces libwinpthread/msvcrt to link statically, which fails with
+    # "undefined reference to __intrinsic_setjmpex / __ms_vsnprintf" on some
+    # MinGW distributions, e.g. CLion's bundled toolchain). This is enough to
+    # avoid picking up a mismatched libgcc_s_seh-1.dll / libstdc++-6.dll from
+    # another MinGW install on PATH.
+    target_link_options(crossy_invaders PRIVATE -static-libgcc -static-libstdc++)
 endif()
 
 set(SDL_STATIC ON)
