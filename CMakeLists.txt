@@ -22,6 +22,13 @@ add_executable(crossy_invaders
     Components.h
     bagel.h)
 
+if (MINGW)
+    # Statically link the MinGW runtime (libgcc/libstdc++/libwinpthread) so the
+    # .exe runs standalone on any Windows machine, even one without MinGW
+    # installed or with a mismatched runtime DLL on PATH.
+    target_link_options(crossy_invaders PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
+
 set(SDL_STATIC ON)
 set(SDL_SHARED OFF)
 add_subdirectory(lib/SDL)
