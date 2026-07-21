@@ -16,18 +16,11 @@ namespace ci
         static const int  q        = World::createQuery(mask);
         static const Mask plInvMask= MaskBuilder().set<PlayerTag>().set<Invincibility>().build();
         static const int  qPlInv   = World::createQuery(plInvMask);
-        static int debugFrameCount = 0;
-        if (Entity::firstQ(q).eofQ(q))
-            fprintf(stderr, "[DEBUG] map_screen_system: query q is EMPTY, no MapScreen entity matched (frame %d)\n", debugFrameCount);
-        debugFrameCount++;
         for (Entity e = Entity::firstQ(q); !e.eofQ(q); e.nextQ(q)) {
             auto& ms = e.get<MapScreen>();
-            if (debugFrameCount % 30 == 0)
-                fprintf(stderr, "[DEBUG] map_screen_system: framesLeft=%d planeT=%.3f\n", ms.framesLeft, ms.planeT);
             if (ms.planeT < 1.f)
                 ms.planeT = std::min(1.f, ms.planeT + 1.f / 180.f);
             if (--ms.framesLeft <= 0) {
-                fprintf(stderr, "[DEBUG] map_screen_system: TRANSITIONING to Playing\n");
                 e.destroy();
                 const int splashFrames = (_current_level == 4 ? 300 : 150);
                 Entity::create().add(LevelSplash{splashFrames});

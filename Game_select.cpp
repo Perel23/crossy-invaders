@@ -17,10 +17,7 @@ namespace ci
         bool ssFound = false;
         for (Entity e = Entity::first(); !e.eof(); e.next())
             if (e.test(ssMask)) { ssEnt = e; ssFound = true; break; }
-        if (!ssFound) {
-            fprintf(stderr, "[DEBUG] select_input: SelectState entity NOT FOUND (maxId=%d)\n", World::maxId());
-            return;
-        }
+        if (!ssFound) return;
         auto& ss = ssEnt.get<SelectState>();
 
         const bool* keys = SDL_GetKeyboardState(nullptr);
@@ -29,17 +26,12 @@ namespace ci
         const bool lr = goLeft || goRight;
         const bool ud = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_DOWN];
 
-        if (lr || ud)
-            fprintf(stderr, "[DEBUG] select_input: goRight=%d goLeft=%d ud=%d moved=%d selected(before)=%d\n",
-                    goRight, goLeft, ud, ss.moved, ss.selected);
-
         if ((lr || ud) && !ss.moved) {
             if (goRight) ss.selected = (ss.selected + 1) % NUM_CHARS;
             if (goLeft)  ss.selected = (ss.selected - 1 + NUM_CHARS) % NUM_CHARS;
             if (keys[SDL_SCANCODE_UP])   ss.difficulty = std::min(ss.difficulty + 1, 2);
             if (keys[SDL_SCANCODE_DOWN]) ss.difficulty = std::max(ss.difficulty - 1, 0);
             ss.moved = true;
-            fprintf(stderr, "[DEBUG] select_input: selected(after)=%d\n", ss.selected);
         } else if (!lr && !ud) {
             ss.moved = false;
         }
